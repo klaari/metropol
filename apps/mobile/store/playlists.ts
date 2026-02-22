@@ -18,7 +18,7 @@ interface PlaylistsState {
   renamePlaylist: (playlistId: string, name: string) => Promise<void>;
   deletePlaylist: (playlistId: string) => Promise<void>;
   getPlaylistTracks: (playlistId: string) => Promise<(Track & { playlistTrackId: string; position: number })[]>;
-  addTracksToPlaylist: (playlistId: string, trackIds: string[]) => Promise<void>;
+  addTracksToPlaylist: (playlistId: string, trackIds: string[]) => Promise<number>;
   removeTrackFromPlaylist: (playlistTrackId: string, playlistId: string) => Promise<void>;
   reorderTrack: (playlistId: string, fromPos: number, toPos: number) => Promise<void>;
 }
@@ -131,16 +131,22 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
   },
 
   addTracksToPlaylist: async (playlistId, trackIds) => {
-    // Get current max position
+    // Get existing entries for this playlist
     const existing = await db
-      .select({ position: playlistTracks.position })
+      .select({ trackId: playlistTracks.trackId, position: playlistTracks.position })
       .from(playlistTracks)
       .where(eq(playlistTracks.playlistId, playlistId))
       .orderBy(playlistTracks.position);
 
+    // Filter out tracks already in the playlist
+    const existingTrackIds = new Set(existing.map((r) => r.trackId));
+    const newTrackIds = trackIds.filter((id) => !existingTrackIds.has(id));
+
+    if (newTrackIds.length === 0) return 0;
+
     let nextPos = existing.length > 0 ? existing[existing.length - 1]!.position + 1 : 0;
 
-    const values = trackIds.map((trackId) => ({
+    const values = newTrackIds.map((trackId) => ({
       playlistId,
       trackId,
       position: nextPos++,
@@ -152,10 +158,12 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
     set({
       playlists: get().playlists.map((p) =>
         p.id === playlistId
-          ? { ...p, trackCount: p.trackCount + trackIds.length }
+          ? { ...p, trackCount: p.trackCount + newTrackIds.length }
           : p,
       ),
     });
+
+    return newTrackIds.length;
   },
 
   removeTrackFromPlaylist: async (playlistTrackId, playlistId) => {

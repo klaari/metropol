@@ -6,6 +6,7 @@ import {
   uploadAsync,
   FileSystemUploadType,
 } from "expo-file-system/legacy";
+import { randomUUID } from "expo-crypto";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -13,18 +14,20 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
-import { v4 as uuid } from "uuid";
 import EditTrackModal from "../../components/EditTrackModal";
 import TrackItem from "../../components/TrackItem";
 import { db } from "../../lib/db";
 import { buildFileKey, getUploadUrl } from "../../lib/r2";
 import { type SortOption, useLibraryStore } from "../../store/library";
+import { usePlaylistsStore } from "../../store/playlists";
 
 const AUDIO_TYPES = [
   "audio/mpeg",
@@ -75,9 +78,22 @@ export default function LibraryScreen() {
 
   const [importing, setImporting] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
+  const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
+  const [newPlaylistName, setNewPlaylistName] = useState("");
+  const [creatingPlaylist, setCreatingPlaylist] = useState(false);
+
+  const {
+    playlists: playlistList,
+    fetchPlaylists,
+    addTracksToPlaylist,
+    createPlaylist,
+  } = usePlaylistsStore();
 
   useEffect(() => {
-    if (userId) fetchTracks(userId);
+    if (userId) {
+      fetchTracks(userId);
+      fetchPlaylists(userId);
+    }
   }, [userId]);
 
   const handleImport = useCallback(async () => {
@@ -92,14 +108,16 @@ export default function LibraryScreen() {
 
     const file = result.assets[0]!;
     const ext = extFromName(file.name);
-    const trackId = uuid();
+    const trackId = randomUUID();
     const fileKey = buildFileKey(userId, trackId, ext);
     const contentType = contentTypeFromExt(ext);
 
     setImporting(true);
     try {
+      console.log("[import] generating presigned URL…");
       const uploadUrl = await getUploadUrl(fileKey, contentType);
 
+      console.log("[import] uploading to R2…");
       const uploadResult = await uploadAsync(uploadUrl, file.uri, {
         httpMethod: "PUT",
         headers: { "Content-Type": contentType },
@@ -110,6 +128,7 @@ export default function LibraryScreen() {
         throw new Error(`Upload failed with status ${uploadResult.status}`);
       }
 
+      console.log("[import] inserting into DB…");
       const title = file.name.replace(/\.[^.]+$/, "");
 
       const [inserted] = await db
@@ -125,7 +144,9 @@ export default function LibraryScreen() {
         .returning();
 
       addTrack(inserted as Track);
+      console.log("[import] done!");
     } catch (err) {
+      console.error("[import] error:", err);
       Alert.alert(
         "Import Failed",
         err instanceof Error ? err.message : "Something went wrong",
@@ -135,15 +156,53 @@ export default function LibraryScreen() {
     }
   }, [userId]);
 
+  function openPlaylistPicker(track: Track) {
+    if (userId) fetchPlaylists(userId);
+    setNewPlaylistName("");
+    setCreatingPlaylist(false);
+    setPlaylistPickerTrack(track);
+  }
+
+  async function handlePickPlaylist(playlistId: string, playlistName: string) {
+    if (!playlistPickerTrack) return;
+    const track = playlistPickerTrack;
+    setPlaylistPickerTrack(null);
+    const added = await addTracksToPlaylist(playlistId, [track.id]);
+    if (added > 0) {
+      Alert.alert("Added", `"${track.title}" added to ${playlistName}`);
+    } else {
+      Alert.alert("Already Added", `"${track.title}" is already in ${playlistName}`);
+    }
+  }
+
+  async function handleCreateAndAdd() {
+    const name = newPlaylistName.trim();
+    if (!name || !userId || !playlistPickerTrack) return;
+    setCreatingPlaylist(true);
+    try {
+      await createPlaylist(userId, name);
+      const created = usePlaylistsStore.getState().playlists.find(
+        (p) => p.name === name,
+      );
+      if (created) {
+        await handlePickPlaylist(created.id, created.name);
+      }
+    } finally {
+      setCreatingPlaylist(false);
+    }
+  }
+
   function showTrackActions(track: Track) {
-    const options = ["Edit Metadata", "Delete", "Cancel"];
-    const destructiveIndex = 1;
-    const cancelIndex = 2;
+    const options = ["Add to Playlist", "Edit Metadata", "Delete", "Cancel"];
+    const destructiveIndex = 2;
+    const cancelIndex = 3;
 
     function handleAction(index: number) {
       if (index === 0) {
-        setEditingTrack(track);
+        openPlaylistPicker(track);
       } else if (index === 1) {
+        setEditingTrack(track);
+      } else if (index === 2) {
         Alert.alert("Delete Track", `Delete "${track.title}"?`, [
           { text: "Cancel", style: "cancel" },
           {
@@ -162,8 +221,9 @@ export default function LibraryScreen() {
       );
     } else {
       Alert.alert("Track Options", track.title, [
-        { text: "Edit Metadata", onPress: () => handleAction(0) },
-        { text: "Delete", style: "destructive", onPress: () => handleAction(1) },
+        { text: "Add to Playlist", onPress: () => handleAction(0) },
+        { text: "Edit Metadata", onPress: () => handleAction(1) },
+        { text: "Delete", style: "destructive", onPress: () => handleAction(2) },
         { text: "Cancel", style: "cancel" },
       ]);
     }
@@ -243,6 +303,72 @@ export default function LibraryScreen() {
           if (editingTrack) await updateTrack(editingTrack.id, data);
         }}
       />
+
+      <Modal
+        visible={playlistPickerTrack != null}
+        animationType="slide"
+        presentationStyle="formSheet"
+        onRequestClose={() => setPlaylistPickerTrack(null)}
+      >
+        <View style={styles.pickerContainer}>
+          <View style={styles.pickerHeader}>
+            <Pressable onPress={() => setPlaylistPickerTrack(null)}>
+              <Text style={styles.pickerCancel}>Cancel</Text>
+            </Pressable>
+            <Text style={styles.pickerTitle}>Add to Playlist</Text>
+            <View style={{ width: 50 }} />
+          </View>
+
+          <FlatList
+            data={playlistList}
+            keyExtractor={(item) => item.id}
+            ListHeaderComponent={
+              <View style={styles.newPlaylistRow}>
+                <TextInput
+                  style={styles.newPlaylistInput}
+                  value={newPlaylistName}
+                  onChangeText={setNewPlaylistName}
+                  placeholder="New playlist name..."
+                  placeholderTextColor="#666"
+                  returnKeyType="done"
+                  onSubmitEditing={handleCreateAndAdd}
+                />
+                <Pressable
+                  style={[
+                    styles.newPlaylistButton,
+                    (!newPlaylistName.trim() || creatingPlaylist) &&
+                      styles.newPlaylistButtonDisabled,
+                  ]}
+                  onPress={handleCreateAndAdd}
+                  disabled={!newPlaylistName.trim() || creatingPlaylist}
+                >
+                  {creatingPlaylist ? (
+                    <ActivityIndicator color="#000" size="small" />
+                  ) : (
+                    <Text style={styles.newPlaylistButtonText}>Create</Text>
+                  )}
+                </Pressable>
+              </View>
+            }
+            ListEmptyComponent={
+              <View style={styles.pickerEmpty}>
+                <Text style={styles.pickerEmptyText}>No playlists yet</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <Pressable
+                style={styles.pickerRow}
+                onPress={() => handlePickPlaylist(item.id, item.name)}
+              >
+                <Text style={styles.pickerRowText}>{item.name}</Text>
+                <Text style={styles.pickerRowCount}>
+                  {item.trackCount} {item.trackCount === 1 ? "track" : "tracks"}
+                </Text>
+              </Pressable>
+            )}
+          />
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -305,5 +431,86 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     color: "#000",
     marginTop: -2,
+  },
+  pickerContainer: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  pickerHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#333",
+  },
+  pickerTitle: {
+    color: "#fff",
+    fontSize: 17,
+    fontWeight: "600",
+  },
+  pickerCancel: {
+    color: "#888",
+    fontSize: 16,
+  },
+  newPlaylistRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#333",
+  },
+  newPlaylistInput: {
+    flex: 1,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 16,
+    color: "#fff",
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  newPlaylistButton: {
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  newPlaylistButtonDisabled: {
+    opacity: 0.3,
+  },
+  newPlaylistButtonText: {
+    color: "#000",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  pickerEmpty: {
+    paddingVertical: 32,
+    alignItems: "center",
+  },
+  pickerEmptyText: {
+    color: "#666",
+    fontSize: 15,
+  },
+  pickerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#1a1a1a",
+  },
+  pickerRowText: {
+    color: "#fff",
+    fontSize: 16,
+  },
+  pickerRowCount: {
+    color: "#666",
+    fontSize: 13,
   },
 });
