@@ -51,7 +51,13 @@ export const playlistTracks = pgTable(
       .references(() => tracks.id, { onDelete: "cascade" }),
     position: integer("position").notNull(),
   },
-  (table) => [index("playlist_tracks_playlist_id_idx").on(table.playlistId)],
+  (table) => [
+    index("playlist_tracks_playlist_id_idx").on(table.playlistId),
+    uniqueIndex("playlist_tracks_playlist_track_idx").on(
+      table.playlistId,
+      table.trackId,
+    ),
+  ],
 );
 
 export const playbackState = pgTable(
