@@ -1,10 +1,10 @@
 import { playbackState, tracks } from "@marko/db";
 import type { Track } from "@marko/types";
 import { eq, and } from "drizzle-orm";
-import TrackPlayer from "react-native-track-player";
 import { create } from "zustand";
 import { db } from "../lib/db";
 import { getDownloadUrl } from "../lib/r2";
+import { getTrackPlayer } from "../lib/trackPlayer";
 
 interface PlayerState {
   currentTrack: Track | null;
@@ -26,6 +26,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentPlaylistId: null,
 
   loadTrack: async (trackId, userId) => {
+    const tp = getTrackPlayer();
+
     // Fetch track from DB
     const [track] = await db
       .select()
@@ -51,19 +53,21 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Get presigned download URL
     const url = await getDownloadUrl(track.fileKey);
 
-    // Load into track player
-    await TrackPlayer.reset();
-    await TrackPlayer.add({
-      url,
-      title: track.title,
-      artist: track.artist ?? undefined,
-      duration: track.duration ?? undefined,
-    });
+    // Load into track player (if available)
+    if (tp) {
+      await tp.reset();
+      await tp.add({
+        url,
+        title: track.title,
+        artist: track.artist ?? undefined,
+        duration: track.duration ?? undefined,
+      });
 
-    await TrackPlayer.setRate(rate);
+      await tp.setRate(rate);
 
-    if (position > 0) {
-      await TrackPlayer.seekTo(position);
+      if (position > 0) {
+        await tp.seekTo(position);
+      }
     }
 
     set({ currentTrack: track as Track, playbackRate: rate });
@@ -76,7 +80,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   setRate: async (rate, userId) => {
-    await TrackPlayer.setRate(rate);
+    const tp = getTrackPlayer();
+    if (tp) await tp.setRate(rate);
     set({ playbackRate: rate });
 
     // Debounced save to DB
@@ -100,10 +105,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   },
 
   savePosition: async (userId) => {
+    const tp = getTrackPlayer();
     const { currentTrack } = get();
-    if (!currentTrack) return;
+    if (!currentTrack || !tp) return;
 
-    const { position } = await TrackPlayer.getProgress();
+    const { position } = await tp.getProgress();
 
     await db
       .insert(playbackState)

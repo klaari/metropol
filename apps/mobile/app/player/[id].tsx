@@ -13,10 +13,8 @@ import {
   TextInput,
   View,
 } from "react-native";
-import TrackPlayer from "react-native-track-player";
-import { useIsPlaying, useProgress } from "react-native-track-player";
 import { db } from "../../lib/db";
-import { getPlayerAvailable } from "../../lib/trackPlayer";
+import { getPlayerAvailable, getTrackPlayer } from "../../lib/trackPlayer";
 import { usePlayerStore } from "../../store/player";
 
 function formatTime(seconds: number): string {
@@ -29,8 +27,32 @@ export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { userId } = useAuth();
   const router = useRouter();
-  const { position, duration } = useProgress(200);
-  const { playing } = useIsPlaying();
+
+  // Polling-based replacements for useProgress / useIsPlaying
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [playing, setPlaying] = useState(false);
+
+  useEffect(() => {
+    const tp = getTrackPlayer();
+    if (!tp) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const progress = await tp.getProgress();
+        setPosition(progress.position);
+        setDuration(progress.duration);
+
+        const state = await tp.getPlaybackState();
+        // state.state is a string like "playing", "paused", etc.
+        setPlaying(state.state === "playing");
+      } catch {
+        // Player may not be ready yet
+      }
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const { currentTrack, playbackRate, loadTrack, setRate, savePosition } =
     usePlayerStore();
@@ -76,15 +98,18 @@ export default function PlayerScreen() {
       : null;
 
   async function handleSeek(value: number) {
-    await TrackPlayer.seekTo(value);
+    const tp = getTrackPlayer();
+    if (tp) await tp.seekTo(value);
   }
 
   async function togglePlayPause() {
+    const tp = getTrackPlayer();
+    if (!tp) return;
     if (playing) {
-      await TrackPlayer.pause();
+      await tp.pause();
       if (userId) savePosition(userId);
     } else {
-      await TrackPlayer.play();
+      await tp.play();
     }
   }
 
@@ -196,7 +221,7 @@ export default function PlayerScreen() {
       {/* Transport Controls */}
       <View style={styles.transport}>
         <Pressable
-          onPress={() => TrackPlayer.skipToPrevious().catch(() => {})}
+          onPress={() => getTrackPlayer()?.skipToPrevious().catch(() => {})}
           hitSlop={12}
         >
           <Text style={styles.transportBtn}>⏮</Text>
@@ -211,7 +236,7 @@ export default function PlayerScreen() {
         </Pressable>
 
         <Pressable
-          onPress={() => TrackPlayer.skipToNext().catch(() => {})}
+          onPress={() => getTrackPlayer()?.skipToNext().catch(() => {})}
           hitSlop={12}
         >
           <Text style={styles.transportBtn}>⏭</Text>
