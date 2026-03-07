@@ -21,6 +21,7 @@ export const tracks = pgTable(
     fileKey: text("file_key").notNull(),
     fileSize: integer("file_size"),
     format: text("format"),
+    sourceUrl: text("source_url"),
     importedAt: timestamp("imported_at").defaultNow().notNull(),
     lastPlayedAt: timestamp("last_played_at"),
   },
@@ -78,4 +79,24 @@ export const playbackState = pgTable(
       table.trackId,
     ),
   ],
+);
+
+export const downloadJobs = pgTable(
+  "download_jobs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id").notNull(),
+    url: text("url").notNull(),
+    status: text("status").notNull().default("queued"),
+    title: text("title"),
+    artist: text("artist"),
+    duration: integer("duration"),
+    trackId: uuid("track_id").references(() => tracks.id, {
+      onDelete: "set null",
+    }),
+    error: text("error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    completedAt: timestamp("completed_at"),
+  },
+  (table) => [index("download_jobs_user_id_idx").on(table.userId)],
 );

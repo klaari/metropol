@@ -8,6 +8,7 @@ export interface Track {
   fileKey: string;
   fileSize: number | null;
   format: string | null;
+  sourceUrl: string | null;
   importedAt: Date;
   lastPlayedAt: Date | null;
 }
@@ -22,6 +23,7 @@ export interface TrackInsert {
   fileKey: string;
   fileSize?: number | null;
   format?: string | null;
+  sourceUrl?: string | null;
 }
 
 export interface Playlist {
@@ -67,4 +69,39 @@ export interface PlaybackStateInsert {
   trackId: string;
   playbackRate?: number;
   lastPosition?: number;
+}
+
+// Download job types
+
+export type DownloadJobStatus =
+  | "queued"
+  | "downloading"
+  | "uploading"
+  | "completed"
+  | "failed";
+
+export interface DownloadJob {
+  id: string;
+  userId: string;
+  url: string;
+  status: DownloadJobStatus;
+  title: string | null;
+  artist: string | null;
+  duration: number | null;
+  trackId: string | null;
+  error: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+}
+
+export interface WsJobStatusMessage {
+  type: "job:status";
+  jobId: string;
+  status: DownloadJobStatus;
+  title: string | null;
+  artist: string | null;
+  duration: number | null;
+  trackId: string | null;
+  error: string | null;
+  progress: number | null;
 }
