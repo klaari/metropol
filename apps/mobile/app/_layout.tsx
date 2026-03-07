@@ -6,6 +6,8 @@ import { Slot } from "expo-router";
 import React, { useEffect } from "react";
 import { ActivityIndicator, LogBox, ScrollView, Text, View } from "react-native";
 import { registerPlaybackService, setupPlayer } from "../lib/trackPlayer";
+import { useDownloadWs } from "../hooks/useDownloadWs";
+import { useAppResumeFetch } from "../hooks/useAppResumeFetch";
 
 // Log all unhandled JS errors to the terminal
 const origHandler = ErrorUtils.getGlobalHandler();
@@ -23,8 +25,14 @@ if (!publishableKey) {
 
 registerPlaybackService();
 
+function AuthenticatedHooks() {
+  useDownloadWs();
+  useAppResumeFetch();
+  return null;
+}
+
 function ClerkGate() {
-  const { isLoaded } = useAuth();
+  const { isLoaded, isSignedIn } = useAuth();
 
   if (!isLoaded) {
     return (
@@ -35,7 +43,12 @@ function ClerkGate() {
     );
   }
 
-  return <Slot />;
+  return (
+    <>
+      {isSignedIn && <AuthenticatedHooks />}
+      <Slot />
+    </>
+  );
 }
 
 export { ErrorBoundary };
