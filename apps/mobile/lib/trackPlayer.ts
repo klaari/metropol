@@ -1,6 +1,5 @@
 let TrackPlayer: typeof import("react-native-track-player").default | null =
   null;
-let isPlayerAvailable = false;
 
 try {
   TrackPlayer = require("react-native-track-player").default;
@@ -8,15 +7,29 @@ try {
   // Native module not available (Expo Go)
 }
 
-export function getPlayerAvailable() {
-  return isPlayerAvailable;
+/** True if the native module exists at all (i.e. running in a dev/production build) */
+export function isNativeModuleAvailable(): boolean {
+  return TrackPlayer !== null;
 }
 
 export function getTrackPlayer() {
   return TrackPlayer;
 }
 
-export async function setupPlayer(): Promise<boolean> {
+// Singleton promise so setupPlayer() is safe to call multiple times
+let setupPromise: Promise<boolean> | null = null;
+
+/**
+ * Set up the RNTP player. Safe to call multiple times — returns the same
+ * promise after the first call. Await this before calling any RNTP methods.
+ */
+export function setupPlayer(): Promise<boolean> {
+  if (setupPromise) return setupPromise;
+  setupPromise = _setupPlayer();
+  return setupPromise;
+}
+
+async function _setupPlayer(): Promise<boolean> {
   if (!TrackPlayer) return false;
 
   try {
@@ -44,13 +57,11 @@ export async function setupPlayer(): Promise<boolean> {
         Capability.SkipToNext,
       ],
     });
-    isPlayerAvailable = true;
     return true;
   } catch {
     console.warn(
-      "react-native-track-player not available — audio playback disabled",
+      "react-native-track-player setup failed — audio playback disabled",
     );
-    isPlayerAvailable = false;
     return false;
   }
 }
@@ -74,8 +85,9 @@ export function registerPlaybackService() {
       TrackPlayer!.addEventListener(Event.RemotePrevious, () =>
         TrackPlayer!.skipToPrevious(),
       );
-      TrackPlayer!.addEventListener(Event.RemoteSeek, (e: { position: number }) =>
-        TrackPlayer!.seekTo(e.position),
+      TrackPlayer!.addEventListener(
+        Event.RemoteSeek,
+        (e: { position: number }) => TrackPlayer!.seekTo(e.position),
       );
     });
   } catch {

@@ -4,7 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { create } from "zustand";
 import { db } from "../lib/db";
 import { getDownloadUrl } from "../lib/r2";
-import { getTrackPlayer } from "../lib/trackPlayer";
+import { getTrackPlayer, setupPlayer } from "../lib/trackPlayer";
 
 interface PlayerState {
   currentTrack: Track | null;
@@ -18,6 +18,26 @@ interface PlayerState {
   reset: () => void;
 }
 
+/** Upsert a partial playback state row — only the provided fields are updated. */
+async function upsertPlaybackState(
+  userId: string,
+  trackId: string,
+  fields: { playbackRate?: number; lastPosition?: number },
+) {
+  await db
+    .insert(playbackState)
+    .values({
+      userId,
+      trackId,
+      playbackRate: fields.playbackRate ?? 1.0,
+      lastPosition: fields.lastPosition ?? 0,
+    })
+    .onConflictDoUpdate({
+      target: [playbackState.userId, playbackState.trackId],
+      set: { ...fields, updatedAt: new Date() },
+    });
+}
+
 let saveDebounce: ReturnType<typeof setTimeout> | null = null;
 
 export const usePlayerStore = create<PlayerState>((set, get) => ({
@@ -26,6 +46,8 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentPlaylistId: null,
 
   loadTrack: async (trackId, userId) => {
+    // Ensure the player is set up before calling any RNTP methods
+    const playerReady = await setupPlayer();
     const tp = getTrackPlayer();
 
     // Fetch track from DB
@@ -50,11 +72,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const rate = saved?.playbackRate ?? 1.0;
     const position = saved?.lastPosition ?? 0;
 
-    // Get presigned download URL
-    const url = await getDownloadUrl(track.fileKey);
+    if (playerReady && tp) {
+      const url = await getDownloadUrl(track.fileKey);
 
-    // Load into track player (if available)
-    if (tp) {
       await tp.reset();
       await tp.add({
         url,
@@ -84,23 +104,12 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (tp) await tp.setRate(rate);
     set({ playbackRate: rate });
 
-    // Debounced save to DB
     const { currentTrack } = get();
     if (!currentTrack) return;
 
     if (saveDebounce) clearTimeout(saveDebounce);
-    saveDebounce = setTimeout(async () => {
-      await db
-        .insert(playbackState)
-        .values({
-          userId,
-          trackId: currentTrack.id,
-          playbackRate: rate,
-        })
-        .onConflictDoUpdate({
-          target: [playbackState.userId, playbackState.trackId],
-          set: { playbackRate: rate, updatedAt: new Date() },
-        });
+    saveDebounce = setTimeout(() => {
+      upsertPlaybackState(userId, currentTrack.id, { playbackRate: rate });
     }, 500);
   },
 
@@ -110,18 +119,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (!currentTrack || !tp) return;
 
     const { position } = await tp.getProgress();
-
-    await db
-      .insert(playbackState)
-      .values({
-        userId,
-        trackId: currentTrack.id,
-        lastPosition: Math.floor(position),
-      })
-      .onConflictDoUpdate({
-        target: [playbackState.userId, playbackState.trackId],
-        set: { lastPosition: Math.floor(position), updatedAt: new Date() },
-      });
+    await upsertPlaybackState(userId, currentTrack.id, {
+      lastPosition: Math.floor(position),
+    });
   },
 
   setPlaylistContext: (playlistId) => {

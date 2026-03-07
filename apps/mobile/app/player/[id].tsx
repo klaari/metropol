@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 import { db } from "../../lib/db";
-import { getPlayerAvailable, getTrackPlayer } from "../../lib/trackPlayer";
+import { isNativeModuleAvailable, getTrackPlayer } from "../../lib/trackPlayer";
 import { usePlayerStore } from "../../store/player";
 
 function formatTime(seconds: number): string {
@@ -135,7 +135,7 @@ export default function PlayerScreen() {
     });
   }
 
-  if (!getPlayerAvailable()) {
+  if (!isNativeModuleAvailable()) {
     return (
       <View style={styles.container}>
         <Text style={styles.errorText}>Audio playback not available</Text>
