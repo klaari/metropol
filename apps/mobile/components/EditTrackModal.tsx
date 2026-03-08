@@ -1,4 +1,4 @@
-import type { Track } from "@markku/types";
+import type { Track } from "@metropol/types";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,

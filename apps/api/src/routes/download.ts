@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, and, desc, notInArray } from "drizzle-orm";
-import { createDb, downloadJobs } from "@markku/db";
+import { createDb, downloadJobs } from "@metropol/db";
 import { clerkAuth } from "../middleware/auth";
 import { env } from "../lib/env";
 import { enqueue } from "../jobs/queue";

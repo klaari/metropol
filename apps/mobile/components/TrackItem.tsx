@@ -1,4 +1,4 @@
-import type { Track } from "@markku/types";
+import type { Track } from "@metropol/types";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 function formatDuration(seconds: number | null): string {

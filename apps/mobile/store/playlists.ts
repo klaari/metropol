@@ -1,5 +1,5 @@
-import { playlists, playlistTracks, tracks } from "@markku/db";
-import type { Playlist, Track } from "@markku/types";
+import { playlists, playlistTracks, tracks } from "@metropol/db";
+import type { Playlist, Track } from "@metropol/types";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { create } from "zustand";
 import { db } from "../lib/db";

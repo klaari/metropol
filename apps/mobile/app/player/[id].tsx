@@ -1,4 +1,4 @@
-import { tracks } from "@markku/db";
+import { tracks } from "@metropol/db";
 import { useAuth } from "@clerk/clerk-expo";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { eq } from "drizzle-orm";

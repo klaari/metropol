@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/clerk-expo";
-import type { WsJobStatusMessage } from "@markku/types";
+import type { WsJobStatusMessage } from "@metropol/types";
 import { useDownloadsStore } from "../store/downloads";
 
 const WS_URL = process.env.EXPO_PUBLIC_WS_URL;

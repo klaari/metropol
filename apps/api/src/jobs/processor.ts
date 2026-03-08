@@ -1,8 +1,8 @@
 import { rm } from "node:fs/promises";
 import { eq } from "drizzle-orm";
-import { createDb } from "@markku/db";
-import { downloadJobs, tracks } from "@markku/db";
-import type { WsJobStatusMessage, DownloadJobStatus } from "@markku/types";
+import { createDb } from "@metropol/db";
+import { downloadJobs, tracks } from "@metropol/db";
+import type { WsJobStatusMessage, DownloadJobStatus } from "@metropol/types";
 import { env } from "../lib/env";
 import { uploadToR2, deleteFromR2 } from "../lib/r2";
 import { getMetadata, downloadAudio } from "./ytdlp";

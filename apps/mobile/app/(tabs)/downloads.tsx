@@ -11,7 +11,7 @@ import {
   Platform,
 } from "react-native";
 import { useAuth } from "@clerk/clerk-expo";
-import type { DownloadJob } from "@markku/types";
+import type { DownloadJob } from "@metropol/types";
 import { useDownloadsStore } from "../../store/downloads";
 import { DownloadJobItem } from "../../components/DownloadJobItem";
 

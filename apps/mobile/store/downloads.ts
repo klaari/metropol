@@ -1,4 +1,4 @@
-import type { DownloadJob, WsJobStatusMessage } from "@markku/types";
+import type { DownloadJob, WsJobStatusMessage } from "@metropol/types";
 import { create } from "zustand";
 import { apiFetch } from "../lib/api";
 

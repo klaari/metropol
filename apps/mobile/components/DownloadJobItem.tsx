@@ -1,6 +1,6 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import type { DownloadJob, DownloadJobStatus } from "@markku/types";
+import type { DownloadJob, DownloadJobStatus } from "@metropol/types";
 
 const STATUS_LABELS: Record<DownloadJobStatus, string> = {
   queued: "Queued",
