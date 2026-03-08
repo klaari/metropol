@@ -31,11 +31,13 @@ fi
 
 # ── 2. Duplicate native dependencies ──────────────────────────────────────
 echo -e "${BOLD}[2/6] Duplicate dependencies${NC}"
-REACT_VERSIONS=$(npm ls react 2>/dev/null | grep -o 'react@[0-9][^ ]*' | sort -u | wc -l | tr -d ' ')
-if [ "$REACT_VERSIONS" -le 1 ]; then
-  ok "Single React version ($(npm ls react 2>/dev/null | grep -o 'react@[0-9][^ ]*' | sort -u | head -1))"
+REACT_VERSIONS=$(find . -maxdepth 6 -name "package.json" -path "*/node_modules/react/package.json" 2>/dev/null | xargs python3 -c "import json,sys; [print(json.load(open(f))['version']) for f in sys.argv[1:]]" 2>/dev/null | sort -u | wc -l | tr -d ' ')
+REACT_VER_LIST=$(find . -maxdepth 6 -name "package.json" -path "*/node_modules/react/package.json" 2>/dev/null | xargs python3 -c "import json,sys; [print(json.load(open(f))[\'version\']) for f in sys.argv[1:]]" 2>/dev/null | sort -u)
+REACT_COUNT=$(echo "$REACT_VER_LIST" | grep -c . || true)
+if [ "$REACT_COUNT" -le 1 ]; then
+  ok "Single React version ($REACT_VER_LIST)"
 else
-  fail "Multiple React versions: $(npm ls react 2>/dev/null | grep -o 'react@[0-9][^ ]*' | sort -u | tr '\n' ' ')"
+  fail "Multiple React versions installed: $(echo $REACT_VER_LIST | tr '\n' ' ') — run: npm install"
 fi
 
 # ── 3. EAS env vars set ────────────────────────────────────────────────────
