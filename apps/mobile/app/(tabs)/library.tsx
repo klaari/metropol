@@ -24,7 +24,7 @@ import {
 } from "react-native";
 import EditTrackModal from "../../components/EditTrackModal";
 import TrackItem from "../../components/TrackItem";
-import { db } from "../../lib/db";
+import { getDb } from "../lib/db";
 import { buildFileKey, getUploadUrl } from "../../lib/r2";
 import { type SortOption, useLibraryStore } from "../../store/library";
 import { usePlaylistsStore } from "../../store/playlists";

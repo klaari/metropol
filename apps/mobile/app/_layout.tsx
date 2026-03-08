@@ -4,26 +4,16 @@ import { tokenCache } from "@clerk/clerk-expo/token-cache";
 import { ErrorBoundary } from "expo-router";
 import { Slot } from "expo-router";
 import React, { useEffect } from "react";
-import { ActivityIndicator, LogBox, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { registerPlaybackService, setupPlayer } from "../lib/trackPlayer";
 import { useDownloadWs } from "../hooks/useDownloadWs";
 import { useAppResumeFetch } from "../hooks/useAppResumeFetch";
-
-// Log all unhandled JS errors to the terminal
-const origHandler = ErrorUtils.getGlobalHandler();
-ErrorUtils.setGlobalHandler((error, isFatal) => {
-  console.error("[CRASH]", isFatal ? "FATAL:" : "", error?.message ?? error);
-  console.error("[CRASH] stack:", error?.stack ?? "no stack");
-  origHandler(error, isFatal);
-});
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
 if (!publishableKey) {
   throw new Error("EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY is not set");
 }
-
-registerPlaybackService();
 
 function AuthenticatedHooks() {
   useDownloadWs();
@@ -55,6 +45,9 @@ export { ErrorBoundary };
 
 export default function RootLayout() {
   useEffect(() => {
+    // Register and set up audio player after mount — not at module level
+    // to avoid native module initialization crashes on startup
+    registerPlaybackService();
     setupPlayer();
   }, []);
 

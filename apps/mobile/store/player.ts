@@ -2,7 +2,7 @@ import { playbackState, tracks } from "@metropol/db";
 import type { Track } from "@metropol/types";
 import { eq, and } from "drizzle-orm";
 import { create } from "zustand";
-import { db } from "../lib/db";
+import { getDb } from "../lib/db";
 import { getDownloadUrl } from "../lib/r2";
 import { getTrackPlayer, setupPlayer } from "../lib/trackPlayer";
 

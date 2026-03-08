@@ -2,7 +2,7 @@ import { playlists, playlistTracks, tracks } from "@metropol/db";
 import type { Playlist, Track } from "@metropol/types";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { create } from "zustand";
-import { db } from "../lib/db";
+import { getDb } from "../lib/db";
 
 interface PlaylistWithCount extends Playlist {
   trackCount: number;
@@ -96,7 +96,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
 
   deletePlaylist: async (playlistId) => {
     try {
-      await db.delete(playlists).where(eq(playlists.id, playlistId));
+      await getDb().delete(playlists).where(eq(playlists.id, playlistId));
       set({ playlists: get().playlists.filter((p) => p.id !== playlistId) });
     } catch (err) {
       set({
@@ -152,7 +152,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
       position: nextPos++,
     }));
 
-    await db.insert(playlistTracks).values(values);
+    await getDb().insert(playlistTracks).values(values);
 
     // Update local count
     set({

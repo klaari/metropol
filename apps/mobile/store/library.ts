@@ -2,7 +2,7 @@ import { tracks } from "@metropol/db";
 import type { Track } from "@metropol/types";
 import { eq, and, asc, desc } from "drizzle-orm";
 import { create } from "zustand";
-import { db } from "../lib/db";
+import { getDb } from "../lib/db";
 import { deleteObject } from "../lib/r2";
 
 export type SortOption = "date" | "title" | "bpm";
@@ -104,7 +104,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
     try {
       await deleteObject(track.fileKey);
-      await db.delete(tracks).where(eq(tracks.id, trackId));
+      await getDb().delete(tracks).where(eq(tracks.id, trackId));
       set({ tracks: get().tracks.filter((t) => t.id !== trackId) });
     } catch (err) {
       set({

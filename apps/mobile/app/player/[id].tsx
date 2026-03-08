@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { db } from "../../lib/db";
+import { getDb } from "../lib/db";
 import { isNativeModuleAvailable, getTrackPlayer } from "../../lib/trackPlayer";
 import { usePlayerStore } from "../../store/player";
 
