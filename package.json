@@ -7,8 +7,7 @@
     "check-types": "turbo run check-types",
     "lint": "turbo run lint",
     "db:generate": "turbo run db:generate",
-    "db:push": "turbo run db:push",
-    "postinstall": "patch-package"
+    "db:push": "turbo run db:push"
   },
   "devDependencies": {
     "patch-package": "^8.0.1",
@@ -24,7 +23,7 @@
     "packages/*"
   ],
   "overrides": {
-    "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
   }
 }
