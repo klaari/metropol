@@ -46,7 +46,6 @@ export { ErrorBoundary };
 export default function RootLayout() {
   useEffect(() => {
     // Register and set up audio player after mount — not at module level
-    // to avoid native module initialization crashes on startup
     registerPlaybackService();
     setupPlayer();
   }, []);
