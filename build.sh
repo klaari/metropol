@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # build.sh — pre-flight checks then trigger EAS build
 # Usage: ./build.sh [preview|production] [--platform android|ios|all]
-set -e
 
 PROFILE="${1:-preview}"
 PLATFORM="${2:-android}"
@@ -24,7 +23,7 @@ echo -e "\n${BOLD}🚀 Metropol pre-build checks${NC} (profile: $PROFILE)\n"
 
 # ── 1. Lock file in sync ───────────────────────────────────────────────────
 echo -e "${BOLD}[1/6] Lock file${NC}"
-if npm ci --dry-run --ignore-scripts &>/dev/null; then
+if npm ci --dry-run --ignore-scripts > /dev/null 2>&1; then
   ok "package-lock.json is in sync"
 else
   fail "package-lock.json is out of sync — run: npm install && git add package-lock.json"
@@ -32,11 +31,11 @@ fi
 
 # ── 2. Duplicate native dependencies ──────────────────────────────────────
 echo -e "${BOLD}[2/6] Duplicate dependencies${NC}"
-DUPES=$(npm ls react 2>/dev/null | grep "react@" | grep -v "deduped" | wc -l | tr -d ' ')
-if [ "$DUPES" -le 1 ]; then
-  ok "No duplicate React versions"
+REACT_VERSIONS=$(npm ls react 2>/dev/null | grep -o 'react@[0-9][^ ]*' | sort -u | wc -l | tr -d ' ')
+if [ "$REACT_VERSIONS" -le 1 ]; then
+  ok "Single React version ($(npm ls react 2>/dev/null | grep -o 'react@[0-9][^ ]*' | sort -u | head -1))"
 else
-  fail "Multiple React versions found — run: npm install to deduplicate"
+  fail "Multiple React versions: $(npm ls react 2>/dev/null | grep -o 'react@[0-9][^ ]*' | sort -u | tr '\n' ' ')"
 fi
 
 # ── 3. EAS env vars set ────────────────────────────────────────────────────
@@ -50,42 +49,41 @@ REQUIRED_VARS=(
   "EXPO_PUBLIC_R2_SECRET_KEY"
 )
 EAS_VARS=$(cd "$MOBILE_DIR" && eas env:list --environment "$PROFILE" --non-interactive 2>/dev/null || echo "")
-MISSING_VARS=0
 for VAR in "${REQUIRED_VARS[@]}"; do
   if echo "$EAS_VARS" | grep -q "$VAR"; then
-    ok "$VAR is set"
+    ok "$VAR"
   else
     fail "$VAR is missing from EAS $PROFILE environment"
-    MISSING_VARS=$((MISSING_VARS + 1))
   fi
 done
 
 # ── 4. expo-doctor ─────────────────────────────────────────────────────────
 echo -e "${BOLD}[4/6] expo-doctor${NC}"
-DOCTOR_OUT=$(cd "$MOBILE_DIR" && npx expo-doctor 2>&1)
-DOCTOR_FAILS=$(echo "$DOCTOR_OUT" | grep -c "✖" || true)
-# Only fail on critical checks, warn on known acceptable ones
-CRITICAL_FAILS=$(echo "$DOCTOR_OUT" | grep "✖" | grep -v "Metro config\|React Native Directory\|match versions" || true)
-if [ -z "$CRITICAL_FAILS" ]; then
+DOCTOR_OUT=$(cd "$MOBILE_DIR" && npx expo-doctor 2>&1 || true)
+# Known acceptable warnings to skip
+CRITICAL=$(echo "$DOCTOR_OUT" | grep "✖" | grep -v \
+  -e "Metro config" \
+  -e "React Native Directory" \
+  -e "match versions" \
+  || true)
+if [ -z "$CRITICAL" ]; then
   ok "No critical expo-doctor issues"
 else
   while IFS= read -r line; do
-    fail "expo-doctor: $line"
-  done <<< "$CRITICAL_FAILS"
+    [[ -n "$line" ]] && fail "expo-doctor: $(echo "$line" | sed 's/.*✖//')"
+  done <<< "$CRITICAL"
 fi
-# Warn on version mismatches
-VERSION_WARNS=$(echo "$DOCTOR_OUT" | grep "Major version mismatches" || true)
-[ -n "$VERSION_WARNS" ] && warn "Package version mismatches detected (check expo-doctor output)"
 
 # ── 5. Bundle compiles ─────────────────────────────────────────────────────
-echo -e "${BOLD}[5/6] Bundle export (dry run)${NC}"
-if cd "$MOBILE_DIR" && npx expo export --platform android --output-dir /tmp/metropol-bundle-check &>/dev/null; then
+echo -e "${BOLD}[5/6] Bundle export${NC}"
+BUNDLE_OUT=$(cd "$MOBILE_DIR" && npx expo export --platform android --output-dir /tmp/metropol-check 2>&1 || true)
+rm -rf /tmp/metropol-check
+if echo "$BUNDLE_OUT" | grep -q "Exported"; then
   ok "Android bundle exports cleanly"
-  rm -rf /tmp/metropol-bundle-check
 else
-  fail "Bundle export failed — JS errors present"
+  BUNDLE_ERR=$(echo "$BUNDLE_OUT" | grep -i "error\|Error" | head -3)
+  fail "Bundle export failed: $BUNDLE_ERR"
 fi
-cd - > /dev/null
 
 # ── 6. Git state ───────────────────────────────────────────────────────────
 echo -e "${BOLD}[6/6] Git state${NC}"
@@ -93,13 +91,13 @@ UNCOMMITTED=$(git status --porcelain | wc -l | tr -d ' ')
 if [ "$UNCOMMITTED" -eq 0 ]; then
   ok "Working tree is clean"
 else
-  warn "$UNCOMMITTED uncommitted change(s) — build will use committed code, not local changes"
+  warn "$UNCOMMITTED uncommitted change(s) — these won't be included in the build"
 fi
 UNPUSHED=$(git log origin/main..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
 if [ "$UNPUSHED" -eq 0 ]; then
-  ok "All commits pushed to origin"
+  ok "All commits pushed"
 else
-  warn "$UNPUSHED commit(s) not pushed — EAS will build from the uploaded archive, not origin"
+  warn "$UNPUSHED unpushed commit(s) — EAS builds from the archive upload, not git"
 fi
 
 # ── Summary ────────────────────────────────────────────────────────────────
@@ -112,9 +110,9 @@ if [ ${#WARNS[@]} -gt 0 ]; then
 fi
 
 if [ "$FAIL" -gt 0 ]; then
-  echo -e "\n${RED}❌ Pre-flight failed. Fix the issues above before building.${NC}\n"
+  echo -e "\n${RED}❌ Fix the issues above before building.${NC}\n"
   exit 1
 fi
 
-echo -e "\n${GREEN}✅ All checks passed. Starting EAS build...${NC}\n"
+echo -e "\n${GREEN}✅ All checks passed. Triggering EAS build...${NC}\n"
 cd "$MOBILE_DIR" && eas build --platform "$PLATFORM" --profile "$PROFILE" --non-interactive
