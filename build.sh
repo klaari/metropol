@@ -16,8 +16,8 @@ YELLOW='\033[1;33m'
 BOLD='\033[1m'
 NC='\033[0m'
 
-ok()   { echo -e "  ${GREEN}✓${NC} $1"; ((PASS++)); }
-fail() { echo -e "  ${RED}✗${NC} $1"; ((FAIL++)); }
+ok()   { echo -e "  ${GREEN}✓${NC} $1"; PASS=$((PASS + 1)); }
+fail() { echo -e "  ${RED}✗${NC} $1"; FAIL=$((FAIL + 1)); }
 warn() { echo -e "  ${YELLOW}⚠${NC} $1"; WARNS+=("$1"); }
 
 echo -e "\n${BOLD}🚀 Metropol pre-build checks${NC} (profile: $PROFILE)\n"
@@ -56,7 +56,7 @@ for VAR in "${REQUIRED_VARS[@]}"; do
     ok "$VAR is set"
   else
     fail "$VAR is missing from EAS $PROFILE environment"
-    ((MISSING_VARS++))
+    MISSING_VARS=$((MISSING_VARS + 1))
   fi
 done
 
