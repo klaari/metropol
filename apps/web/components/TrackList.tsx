@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import type { DownloadJob, Track } from "@metropol/types";
+import type { LibraryTrack } from "@metropol/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -15,7 +15,7 @@ function formatDuration(seconds: number | null): string {
 
 export default function TrackList() {
   const { getToken } = useAuth();
-  const [tracks, setTracks] = useState<Track[]>([]);
+  const [tracks, setTracks] = useState<LibraryTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,48 +23,16 @@ export default function TrackList() {
     const loadTracks = async () => {
       try {
         const token = await getToken();
-
-        // Try /tracks first, fall back to filtering /downloads
-        const tracksRes = await fetch(`${API_URL}/tracks`, {
+        const res = await fetch(`${API_URL}/tracks`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-
-        if (tracksRes.ok) {
-          const data = (await tracksRes.json()) as Track[];
-          data.sort(
-            (a, b) =>
-              new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime()
-          );
-          setTracks(data);
-        } else {
-          // Fallback: filter completed download jobs
-          const jobsRes = await fetch(`${API_URL}/downloads`, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!jobsRes.ok) throw new Error("Failed to load tracks");
-          const jobs = (await jobsRes.json()) as DownloadJob[];
-          const completed = jobs.filter((j) => j.status === "completed");
-          completed.sort(
-            (a, b) =>
-              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-          // Map to a Track-like shape for display
-          const mapped: Track[] = completed.map((j) => ({
-            id: j.trackId ?? j.id,
-            userId: j.userId,
-            title: j.title ?? j.url,
-            artist: j.artist,
-            duration: j.duration,
-            originalBpm: null,
-            fileKey: "",
-            fileSize: null,
-            format: null,
-            sourceUrl: j.url,
-            importedAt: j.completedAt ?? j.createdAt,
-            lastPlayedAt: null,
-          }));
-          setTracks(mapped);
-        }
+        if (!res.ok) throw new Error("Failed to load tracks");
+        const data = (await res.json()) as LibraryTrack[];
+        data.sort(
+          (a, b) =>
+            new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
+        );
+        setTracks(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load tracks.");
       } finally {

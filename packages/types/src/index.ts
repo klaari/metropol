@@ -1,29 +1,45 @@
 export interface Track {
   id: string;
-  userId: string;
+  youtubeId: string;
   title: string;
   artist: string | null;
   duration: number | null;
-  originalBpm: number | null;
   fileKey: string;
   fileSize: number | null;
   format: string | null;
   sourceUrl: string | null;
-  importedAt: Date;
-  lastPlayedAt: Date | null;
+  downloadedAt: Date;
 }
 
 export interface TrackInsert {
   id?: string;
-  userId: string;
+  youtubeId: string;
   title: string;
   artist?: string | null;
   duration?: number | null;
-  originalBpm?: number | null;
   fileKey: string;
   fileSize?: number | null;
   format?: string | null;
   sourceUrl?: string | null;
+}
+
+export interface UserTrack {
+  id: string;
+  userId: string;
+  trackId: string;
+  addedAt: Date;
+  originalBpm: number | null;
+}
+
+export interface UserTrackWithTrack extends UserTrack {
+  track: Track;
+}
+
+/** Flattened track entry for library UI — merges Track + UserTrack fields. */
+export interface LibraryTrack extends Track {
+  userTrackId: string;
+  addedAt: Date;
+  originalBpm: number | null;
 }
 
 export interface Playlist {
@@ -84,6 +100,7 @@ export interface DownloadJob {
   id: string;
   userId: string;
   url: string;
+  youtubeId: string | null;
   status: DownloadJobStatus;
   title: string | null;
   artist: string | null;

@@ -195,23 +195,32 @@ Seekbarin alla näkyy waveform.
 
 ## Data Models
 
-### `tracks`
+### `tracks` (globaali, jaettu)
 ```
 id            uuid PK
-userId        text (Clerk user ID)
+youtubeId     text UNIQUE NOT NULL   ← dedup-avain, 11-merkkinen YT video ID
 title         text NOT NULL
 artist        text
 duration      integer (seconds)
-originalBpm   real (nullable)
-fileKey       text (R2: {userId}/{trackId}.ext)
+fileKey       text (R2: tracks/{trackId}.m4a)
 fileSize      integer (bytes)
 format        text
-importedAt    timestamp DEFAULT now()
-lastPlayedAt  timestamp
-discogsReleaseId  text (nullable, Phase 3)
-coverUrl      text (nullable, Phase 3)
-label         text (nullable, Phase 3)
-year          integer (nullable, Phase 3)
+sourceUrl     text                   ← alkuperäinen YouTube URL
+downloadedAt  timestamp DEFAULT now()
+discogsReleaseId  text (nullable, Phase 4)
+coverUrl      text (nullable, Phase 4)
+label         text (nullable, Phase 4)
+year          integer (nullable, Phase 4)
+```
+
+### `user_tracks` (per-user kirjasto)
+```
+id          uuid PK
+userId      text NOT NULL (Clerk user ID)
+trackId     uuid FK → tracks.id (cascade delete)
+addedAt     timestamp DEFAULT now()
+originalBpm real (nullable)          ← user-spesifinen
+UNIQUE (userId, trackId)
 ```
 
 ### `playlists`
@@ -246,6 +255,7 @@ updatedAt     timestamp DEFAULT now()
 id          uuid PK
 userId      text
 url         text NOT NULL
+youtubeId   text                     ← ekstraktoitu URL:sta
 status      text (queued | downloading | uploading | completed | failed)
 title       text
 artist      text
@@ -254,6 +264,28 @@ trackId     uuid (FK → tracks.id, kun valmis)
 error       text
 createdAt   timestamp DEFAULT now()
 completedAt timestamp
+```
+
+## Duplikaattilogiikka
+
+Ennen latauksen aloittamista:
+1. Ekstraktoi `youtubeId` URL:sta
+2. Tarkista onko `youtubeId` jo `tracks`-taulussa
+3. Jos on → luo vain `user_tracks`-rivi, ei latausta → välitön
+4. Jos ei → lataa, tallenna `tracks/{trackId}.m4a`, luo `tracks` + `user_tracks`
+
+```typescript
+function extractYoutubeId(url: string): string | null {
+  const patterns = [
+    /[?&]v=([a-zA-Z0-9_-]{11})/,
+    /youtu\.be\/([a-zA-Z0-9_-]{11})/,
+  ];
+  for (const re of patterns) {
+    const match = url.match(re);
+    if (match) return match[1];
+  }
+  return null;
+}
 ```
 
 ---

@@ -9,23 +9,31 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-export const tracks = pgTable(
-  "tracks",
+export const tracks = pgTable("tracks", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  youtubeId: text("youtube_id").unique().notNull(),
+  title: text("title").notNull(),
+  artist: text("artist"),
+  duration: integer("duration"),
+  fileKey: text("file_key").notNull(),
+  fileSize: integer("file_size"),
+  format: text("format"),
+  sourceUrl: text("source_url"),
+  downloadedAt: timestamp("downloaded_at").defaultNow().notNull(),
+});
+
+export const userTracks = pgTable(
+  "user_tracks",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: text("user_id").notNull(),
-    title: text("title").notNull(),
-    artist: text("artist"),
-    duration: integer("duration"),
+    trackId: uuid("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    addedAt: timestamp("added_at").defaultNow().notNull(),
     originalBpm: real("original_bpm"),
-    fileKey: text("file_key").notNull(),
-    fileSize: integer("file_size"),
-    format: text("format"),
-    sourceUrl: text("source_url"),
-    importedAt: timestamp("imported_at").defaultNow().notNull(),
-    lastPlayedAt: timestamp("last_played_at"),
   },
-  (table) => [index("tracks_user_id_idx").on(table.userId)],
+  (t) => [uniqueIndex("user_tracks_user_track_idx").on(t.userId, t.trackId)],
 );
 
 export const playlists = pgTable(
@@ -87,6 +95,7 @@ export const downloadJobs = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     userId: text("user_id").notNull(),
     url: text("url").notNull(),
+    youtubeId: text("youtube_id"),
     status: text("status").notNull().default("queued"),
     title: text("title"),
     artist: text("artist"),

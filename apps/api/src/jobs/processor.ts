@@ -1,7 +1,7 @@
 import { rm } from "node:fs/promises";
 import { eq } from "drizzle-orm";
 import { createDb } from "@metropol/db";
-import { downloadJobs, tracks } from "@metropol/db";
+import { downloadJobs, tracks, userTracks } from "@metropol/db";
 import type { WsJobStatusMessage, DownloadJobStatus } from "@metropol/types";
 import { env } from "../lib/env";
 import { uploadToR2, deleteFromR2 } from "../lib/r2";
@@ -50,7 +50,14 @@ async function processJob(job: QueueJob) {
     await updateJobStatus(jobId, { status: "downloading" });
     broadcast(userId, buildStatusMessage(jobId, "downloading"));
 
-    // Step 2: Get metadata
+    // Step 2: Get youtubeId from the job record
+    const [jobRecord] = await db
+      .select()
+      .from(downloadJobs)
+      .where(eq(downloadJobs.id, jobId));
+    const youtubeId = jobRecord?.youtubeId ?? null;
+
+    // Step 3: Get metadata
     const meta = await getMetadata(url);
     await updateJobStatus(jobId, {
       title: meta.title,
@@ -66,11 +73,11 @@ async function processJob(job: QueueJob) {
       }),
     );
 
-    // Step 3: Download audio
+    // Step 4: Download audio
     const result = await downloadAudio(url);
     cleanupDir = result.cleanupDir;
 
-    // Step 4: Upload to R2
+    // Step 5: Upload to R2 (global path — no userId prefix)
     await updateJobStatus(jobId, { status: "uploading" });
     broadcast(userId, buildStatusMessage(jobId, "uploading", {
       title: meta.title,
@@ -79,14 +86,17 @@ async function processJob(job: QueueJob) {
     }));
 
     const trackId = crypto.randomUUID();
-    fileKey = `${userId}/${trackId}.m4a`;
+    fileKey = `tracks/${trackId}.m4a`;
     const fileData = await Bun.file(result.filePath).arrayBuffer();
     await uploadToR2(fileKey, new Uint8Array(fileData), "audio/mp4");
 
-    // Step 5: Insert track into DB
+    // Step 6: Insert into global tracks table (no userId)
+    if (!youtubeId) {
+      throw new Error("youtubeId missing from job — cannot insert global track");
+    }
     await db.insert(tracks).values({
       id: trackId,
-      userId,
+      youtubeId,
       title: meta.title,
       artist: meta.artist,
       duration: meta.duration,
@@ -96,7 +106,13 @@ async function processJob(job: QueueJob) {
       sourceUrl: url,
     });
 
-    // Step 6: Mark job completed
+    // Step 7: Link track to user in user_tracks
+    await db
+      .insert(userTracks)
+      .values({ userId, trackId })
+      .onConflictDoNothing();
+
+    // Step 8: Mark job completed
     await updateJobStatus(jobId, {
       status: "completed",
       trackId,
