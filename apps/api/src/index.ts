@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { env } from "./lib/env";
 import { healthRoute } from "./routes/health";
 import { downloadRoute } from "./routes/download";
+import { cookiesRoute } from "./routes/cookies";
 import { handleWsOpen, handleWsClose, handleWsMessage } from "./ws/handler";
 import { initProcessor, recoverStaleJobs } from "./jobs/processor";
 
@@ -25,6 +26,7 @@ app.use("*", cors());
 
 app.route("/", healthRoute);
 app.route("/", downloadRoute);
+app.route("/", cookiesRoute);
 
 const server = Bun.serve({
   port: env.port,

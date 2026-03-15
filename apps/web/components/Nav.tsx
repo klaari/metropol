@@ -26,6 +26,9 @@ export default function Nav() {
             <Link href="/library" className={linkClass("/library")}>
               Library
             </Link>
+            <Link href="/settings" className={linkClass("/settings")}>
+              Settings
+            </Link>
           </SignedIn>
         </div>
         <div>
