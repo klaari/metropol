@@ -1,124 +1,195 @@
-# Metropol Player — Phase 1 Feature Spec
+# Metropol Player — Spec
 
-## Overview
-Metropol Player is a personal mobile music player. Single user. The goal is a
-fast, focused player where the core feature is creating playlists and adjusting tempo/pitch together
-with live BPM feedback — useful for planning dj sets.
+## Vision
+
+Metropol Player on henkilökohtainen mobiilimusiikkisoitin DJ-käyttöön. Ydinidea:
+selaat Discogsia, löydät biisin, lataat sen — kaikki yhdessä sovelluksessa. Kirjasto
+synkronoituu pilveen ja soitin tukee tempo/pitch-säätöä live-BPM-näytöllä settisuunnittelua varten.
+
+---
+
+## Stack
+
+- **Mobile:** Expo (SDK 52+) + Expo Router
+- **Audio:** react-native-track-player
+- **State:** Zustand
+- **Auth:** Clerk (Expo SDK)
+- **Database:** Neon (serverless Postgres) + Drizzle ORM
+- **Storage:** Cloudflare R2
+- **API:** Bun + Hono (Railway)
+- **Downloader:** yt-dlp
+- **Monorepo:** Turborepo
+- **Language:** TypeScript everywhere, strict mode
 
 ---
 
 ## Screens & Routes
 
-| Route | Screen | Auth required |
+| Route | Screen | Auth |
 |---|---|---|
 | `/sign-in` | Sign In | No |
 | `/sign-up` | Sign Up | No |
 | `/(tabs)/library` | Track Library | Yes |
 | `/(tabs)/playlists` | Playlists | Yes |
 | `/(tabs)/playlists/[id]` | Playlist Detail | Yes |
+| `/(tabs)/downloads` | Downloads | Yes |
+| `/(tabs)/discogs` | Discogs Browser | Yes (Phase 3) |
 | `/player/[id]` | Player | Yes |
 
 ---
 
-## Feature Specs
+## Phase 1 — Core Player ✅
 
-### 1. Auth (Clerk)
+Perussoitin toimii. Sisältää:
 
-- Sign in and sign up screens using `@clerk/clerk-expo`
-- Email + password auth (no social login needed for personal use)
-- All `(tabs)` routes redirect to `/sign-in` if unauthenticated
-- Clerk `userId` is used as the user identifier across all DB tables
-- Session persists across app restarts
-
----
-
-### 2. Library Screen (`/(tabs)/library`)
-
-**Display**
-- List of all tracks belonging to the current user
-- Each track item shows: title, artist (if set), duration, original BPM (if set)
-- Empty state message when no tracks exist
-
-**Sorting**
-- Sort options: Date Added (default), Title A–Z, BPM low–high
-
-**Actions**
-- Tap track → navigate to `/player/[id]`
-- Long press track → show action sheet: Edit metadata, Delete
-- Delete shows confirmation dialog before removing track from DB and R2
-
-**Import (FAB button)**
-- Floating action button opens device file picker
-- Accept audio formats: mp3, m4a, aac, wav, flac, ogg
-- On file selected:
-  1. Generate a new `trackId` (UUID)
-  2. Upload file to R2 with key `{userId}/{trackId}.{ext}`
-  3. Write track row to Neon `tracks` table
-  4. Show upload progress indicator
-  5. On success: track appears in library list
-  6. On failure: show detailed error toast, clean up any partial upload
-
-**Edit Metadata (sheet/modal)**
-- Fields: Title (required), Artist, BPM (numeric, optional)
-- Save updates the `tracks` row in Neon
+- Clerk-autentikointi
+- Kirjasto (tiedostoimportti laitteelta)
+- Soitin: transport controls, seek, playback rate, BPM-näyttö
+- Playlists + järjestely
+- Neon + Drizzle, Cloudflare R2
 
 ---
 
-### 3. Player Screen (`/player/[id]`)
+## Phase 2 — YouTube-lataus (rakennettu, viimeistellään)
 
-**Track Info**
-- Title and artist displayed at top
+### Toteutettu
+- Bun + Hono API (Railway)
+- yt-dlp lataa audion, uploadaa R2:een
+- BullMQ-jono työnkäsittelyyn
+- WebSocket-yhteys: reaaliaikainen tilan päivitys mobiiliin
+- Downloads-välilehti: URL-syöttö, jono-lista, tilabadet
 
-**Transport Controls**
-- Play / Pause button
-- Seek bar with current position and total duration
-- Previous / Next (within current playlist context if applicable)
-- Background playback supported via react-native-track-player
+### Tehtävä: "+ nappi" pikalisäys
 
-**Playback Rate Control**
-- Numeric input field labeled "Speed"
-- Accepts percentage values from `-8%` to `+8%`
-- Increment/decrement buttons: ±0.5% and ±0.5% step buttons alongside input
-- Changing the rate immediately affects playback
-- Rate and pitch change together — no time-stretching, simple rate adjustment
+**Kuvaus:**
+Korvaa Downloads-välilehden tekstikenttäpohjainen URL-syöttö + napilla,
+joka tarkistaa leikepöydän vain kun käyttäjä itse painaa sitä.
 
-**BPM Display**
-- "Original BPM" — shows stored value, or "—" if not set
-- "Current BPM" — shows `originalBpm * playbackRate`, rounded to 1 decimal
-- Updates live as rate changes
-- Tap "Original BPM" value → opens inline edit to set/update BPM
+**Työnkulku:**
+1. Käyttäjä kopioi YouTube-urlin (esim. Discogsin kautta selaimessa)
+2. Avaa Metropolin
+3. Painaa "+" nappia (sijainti: tab bar tai library FAB)
+4. App tarkistaa leikepöydän → YouTube-url esitäyttää kentän
+5. Käyttäjä painaa "Download" → valmis, jatkaa muuta
+6. Kappale ilmestyy kirjastoon kun lataus valmis
 
-**Persistence**
-- Playback rate saved to `playback_state` table on change (debounced 500ms)
-- Last playback position saved on pause/exit
-- On re-opening a track: restore last rate and seek to last position
+**UX-periaatteet:**
+- Ei automaattisia popupeja — käyttäjä initioi aina
+- Downloads-välilehti jää taustatoiminnoksi, ei päänavigaatioon
+- Latauksen eteneminen ei ole kriittinen info — kirjasto päivittyy kun valmis
 
----
-
-### 4. Playlists Screen (`/(tabs)/playlists`)
-
-**Display**
-- List of user playlists
-- Each item shows: playlist name, track count
-
-**Actions**
-- "New Playlist" button → prompt for name → creates playlist row in Neon
-- Long press playlist → action sheet: Rename, Delete
-- Tap playlist → navigate to `/(tabs)/playlists/[id]`
+**Tekninen:**
+- `expo-clipboard` → `Clipboard.getStringAsync()` napin painalluksella
+- Validoi YouTube URL regex ennen esitäyttöä
+- Sama `submitDownload` store-action kuin nykyisin
 
 ---
 
-### 5. Playlist Detail Screen (`/(tabs)/playlists/[id]`)
+## Phase 3 — Web-sovellus (Next.js)
 
-**Display**
-- Playlist name as header (editable inline)
-- Ordered list of tracks in this playlist
+### Visio
+Selainpohjainen companion-app joka käyttää samaa backendejä kuin mobiili.
+Kun olet koneella, lisäät YouTube-urleja suoraan selaimesta — kappaleet
+latautuvat ja ilmestyvät kirjastoon, joka synkronoituu automaattisesti
+mobiiliin kun palaat puhelimelle.
 
-**Actions**
-- Drag handle to reorder tracks → updates `position` in `playlist_tracks`
-- Tap track → navigate to player (with playlist context for prev/next)
-- Swipe to remove track from playlist (does not delete the track from library)
-- "Add Tracks" button → opens track picker from library → inserts into `playlist_tracks`
+### Stack
+- **Framework:** Next.js (App Router)
+- **Auth:** `@clerk/nextjs` — sama Clerk-sovellus kuin mobiilissa
+- **DB:** `@metropol/db` suoraan server componenteista
+- **Tyypitykset:** `@metropol/types` jaettu paketti
+
+### Sijainti monoreposssa
+```
+apps/
+├── mobile/     (Expo)
+├── api/        (Bun + Hono)
+└── web/        (Next.js) ← uusi
+```
+
+### Ominaisuudet
+
+**YouTube-lisäys**
+- URL-kenttä + lähetysnappi (sama API-endpoint kuin mobiilissa)
+- Clipboard-tunnistus: sivulle navigoitaessa tai kentän fokuksessa
+- Latauksen tila WebSocketin kautta reaaliajassa
+
+**Kirjasto**
+- Lista kaikista ladatuista kappaleista
+- Sortaus: lisäyspäivä, nimi, artisti
+- Metatietojen muokkaus (title, artist, BPM)
+
+**Downloads-historia**
+- Aktiiviset ja valmiit lataukset
+- Virheiden näyttö
+
+### Ei tarvita
+- Audio-playback selaimessa (mobiili on soitin)
+- Tiedostoimportti laitteelta (mobiili-feature)
+- Playlist-hallinta (voi lisätä myöhemmin)
+
+### Tekninen
+- Sama `CLERK_SECRET_KEY` + `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
+- WebSocket yhteys samaan `NEXT_PUBLIC_WS_URL`:iin
+- Deploy: Vercel (tai Railway jos haluaa pitää yhdessä paikassa)
+
+---
+
+## Phase 4 — Discogs-integraatio
+
+### Visio
+Räätälöity Discogs-selain suoraan appissa. Käyttäjä voi hakea julkaisuja,
+nähdä tracklistan ja YouTube-linkit, ladata äänen suoraan — ilman että
+poistuu sovelluksesta. Lisäksi oman collectionin ja wantlistin selaus.
+
+### Ominaisuudet
+
+**Haku & selaus**
+- Haku artistin, julkaisun tai kappaleen nimellä
+- Tulokset: kansi, artisti, levy, vuosi, formaatti
+- Release-sivu: tracklist, notes, YouTube-linkit, versiot
+
+**Lataus Discogsin kautta**
+- YouTube-linkit näkyvät release-sivulla suoraan
+- Yksi tap → lataus alkaa, metadata tulee automaattisesti Discogsilta
+  (artisti, nimi, kansi, vuosi, label)
+- Fallback: jos YouTube-linkkiä ei löydy → clipboard/manuaalinen URL
+
+**Collection & Wantlist**
+- Oman levy-kokoelman selaus ja haku
+- Wantlist-selaus: näe mitä haluaisit, lataa previewt
+- Merkintä: onko biisi jo ladattu Metropoliin
+
+**Autentikointi**
+- Discogs OAuth 1.0a
+- Token-vaihto backendin kautta (lisätään API:lle)
+- Mahdollistaa collection + wantlist + rating-toiminnot
+
+### Tekninen
+- Discogs REST API v2, ilmainen, 60 req/min autentikoituneena
+- OAuth 1.0a token flow API:n kautta
+- Kannet: `api.discogs.com/images/`
+- YouTube-linkit: `release.videos[]` kenttä
+
+### Vaiheistus
+1. Haku + release-sivu + YouTube-lataus (ei Discogs-authia)
+2. Discogs OAuth + collection-selaus
+3. Wantlist + hallinta (lisää/poista/rate)
+
+---
+
+## Phase 5 — Tulevaisuus (ei aikataulua)
+
+**Share Extension**
+Native iOS/Android share extension: jaa YouTube-url suoraan selaimesta
+Metropoliin ilman sovelluksen avaamista. Vaatii Expo bare workflow tai
+custom native build target.
+
+**Automaattinen BPM-tunnistus**
+Audio-analyysi ingestissä, täyttää `originalBpm` automaattisesti.
+
+**Aaltomuoto-visualisointi**
+Seekbarin alla näkyy waveform.
 
 ---
 
@@ -131,18 +202,22 @@ userId        text (Clerk user ID)
 title         text NOT NULL
 artist        text
 duration      integer (seconds)
-originalBpm   real (nullable — user enters manually)
-fileKey       text (R2 object key: {userId}/{trackId}.ext)
+originalBpm   real (nullable)
+fileKey       text (R2: {userId}/{trackId}.ext)
 fileSize      integer (bytes)
-format        text (mp3, m4a, etc)
+format        text
 importedAt    timestamp DEFAULT now()
 lastPlayedAt  timestamp
+discogsReleaseId  text (nullable, Phase 3)
+coverUrl      text (nullable, Phase 3)
+label         text (nullable, Phase 3)
+year          integer (nullable, Phase 3)
 ```
 
 ### `playlists`
 ```
 id         uuid PK
-userId     text (Clerk user ID)
+userId     text
 name       text NOT NULL
 createdAt  timestamp DEFAULT now()
 updatedAt  timestamp DEFAULT now()
@@ -151,80 +226,44 @@ updatedAt  timestamp DEFAULT now()
 ### `playlist_tracks`
 ```
 id          uuid PK
-playlistId  uuid FK → playlists.id (cascade delete)
-trackId     uuid FK → tracks.id (cascade delete)
-position    integer NOT NULL (0-indexed, for ordering)
+playlistId  uuid FK → playlists.id
+trackId     uuid FK → tracks.id
+position    integer NOT NULL
 ```
 
 ### `playback_state`
 ```
 id            uuid PK
-userId        text (Clerk user ID)
-trackId       uuid FK → tracks.id (cascade delete)
+userId        text
+trackId       uuid FK → tracks.id
 playbackRate  real DEFAULT 1.0
 lastPosition  integer DEFAULT 0 (seconds)
 updatedAt     timestamp DEFAULT now()
 ```
 
----
-
-## Cloudflare R2
-
-- Bucket name: `metropol-player`
-- Object key pattern: `{userId}/{trackId}.{ext}`
-- Upload: presigned PUT URL generated client-side (Phase 1)
-- Download/stream: presigned GET URL, expires in 1 hour
-- SDK: `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`
-
----
-
-## State Management (Zustand)
-
-### `playerStore`
-```typescript
-{
-  currentTrackId: string | null
-  isPlaying: boolean
-  playbackRate: number        // e.g. 1.05
-  position: number            // seconds
-  duration: number            // seconds
-  currentPlaylistId: string | null
-}
+### `download_jobs`
 ```
-
-### `libraryStore`
-```typescript
-{
-  tracks: Track[]
-  playlists: Playlist[]
-  isLoading: boolean
-  error: string | null
-}
+id          uuid PK
+userId      text
+url         text NOT NULL
+status      text (queued | downloading | uploading | completed | failed)
+title       text
+artist      text
+duration    integer
+trackId     uuid (FK → tracks.id, kun valmis)
+error       text
+createdAt   timestamp DEFAULT now()
+completedAt timestamp
 ```
 
 ---
 
-## Build Order
+## Konventiot
 
-Follow this sequence — complete and commit each step before moving to the next:
-
-1. Turborepo monorepo scaffold + install all dependencies
-2. `packages/db` — Drizzle schema + `drizzle.config.ts` + first migration run
-3. `packages/types` — shared TypeScript interfaces matching schema
-4. Clerk auth — sign-in/sign-up screens + protected route layout
-5. R2 helpers in `lib/r2.ts` — presigned upload + download URL functions
-6. Library screen — track list + file picker + R2 upload + Neon insert
-7. react-native-track-player setup + audio playback
-8. Player screen — transport controls + rate input + BPM display + persistence
-9. Playlists screen + playlist detail + reorder
-
----
-
-## Out of Scope for Phase 1
-- YouTube / URL importing (Phase 2)
-- Automatic BPM detection (Phase 2)
-- Hono backend server (Phase 2)
-- Waveform visualisation
-- Equalizer
-- Social features
-- Multiple user accounts
+- DB: Drizzle ORM, ei raw SQL
+- Zustand stores: yksi per domain (`library`, `player`, `playlists`, `downloads`)
+- Hooks: `use`-prefix, `hooks/`-kansiossa
+- Ympäristömuuttujat: `EXPO_PUBLIC_` clientille, muut API:lla
+- R2-access presigned URL:ien kautta, ei suoria credentials clientille
+- Error handling: `{ data, error }` result pattern
+- BPM: tallennetaan aina originaali, current = `originalBpm * playbackRate`
