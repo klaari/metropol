@@ -1,0 +1,10 @@
+node_modules
+.git
+.turbo
+.expo
+dist
+build
+ios
+android
+*.env
+*.env.*
