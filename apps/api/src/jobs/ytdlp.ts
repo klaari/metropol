@@ -9,10 +9,11 @@ export interface VideoMetadata {
 }
 
 export async function getMetadata(url: string): Promise<VideoMetadata> {
-  const proc = Bun.spawn(
-    ["yt-dlp", "--dump-json", "--no-download", url],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const args = ["yt-dlp", "--dump-json", "--no-download", "--js-runtimes", "node"];
+  if (process.env.YT_COOKIES_FILE) args.push("--cookies", process.env.YT_COOKIES_FILE);
+  args.push(url);
+
+  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
 
   const [stdout, stderr] = await Promise.all([
     new Response(proc.stdout).text(),
@@ -41,17 +42,18 @@ export async function downloadAudio(url: string): Promise<DownloadResult> {
   const dir = await mkdtemp(join(tmpdir(), "metropol-"));
   const output = join(dir, "audio.%(ext)s");
 
-  const proc = Bun.spawn(
-    [
-      "yt-dlp",
-      "-f", "bestaudio[ext=m4a]/bestaudio",
-      "--extract-audio",
-      "--audio-format", "m4a",
-      "-o", output,
-      url,
-    ],
-    { stdout: "pipe", stderr: "pipe" },
-  );
+  const args = [
+    "yt-dlp",
+    "--js-runtimes", "node",
+    "-f", "bestaudio[ext=m4a]/bestaudio",
+    "--extract-audio",
+    "--audio-format", "m4a",
+    "-o", output,
+  ];
+  if (process.env.YT_COOKIES_FILE) args.push("--cookies", process.env.YT_COOKIES_FILE);
+  args.push(url);
+
+  const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
 
   const stderr = await new Response(proc.stderr).text();
   const code = await proc.exited;
