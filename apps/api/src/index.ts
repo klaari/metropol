@@ -7,6 +7,14 @@ import { downloadRoute } from "./routes/download";
 import { handleWsOpen, handleWsClose, handleWsMessage } from "./ws/handler";
 import { initProcessor, recoverStaleJobs } from "./jobs/processor";
 
+// Decode YouTube cookies from env if provided
+if (process.env.YT_COOKIES_B64) {
+  const cookiesPath = "/tmp/yt-cookies.txt";
+  await Bun.write(cookiesPath, Buffer.from(process.env.YT_COOKIES_B64, "base64").toString("utf-8"));
+  process.env.YT_COOKIES_FILE = cookiesPath;
+  console.log("[startup] YouTube cookies loaded from YT_COOKIES_B64");
+}
+
 // Initialize job processor before starting server
 initProcessor();
 
