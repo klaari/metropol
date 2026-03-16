@@ -24,6 +24,28 @@ cookiesRoute.post("/cookies", async (c) => {
 });
 
 cookiesRoute.get("/cookies", async (c) => {
-  const hasFile = !!process.env.YT_COOKIES_FILE;
-  return c.json({ loaded: hasFile });
+  const path = process.env.YT_COOKIES_FILE;
+  if (!path) return c.json({ loaded: false });
+
+  const file = Bun.file(path);
+  const exists = await file.exists();
+  let lines = 0;
+  let size = 0;
+  let domains: string[] = [];
+  if (exists) {
+    const text = await file.text();
+    size = file.size;
+    const allLines = text.split("\n");
+    lines = allLines.filter((l) => l.trim() && !l.startsWith("#")).length;
+    domains = [
+      ...new Set(
+        allLines
+          .filter((l) => l.trim() && !l.startsWith("#"))
+          .map((l) => l.split("\t")[0])
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  return c.json({ loaded: exists, path, size, cookieLines: lines, domains });
 });
