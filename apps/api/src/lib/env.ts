@@ -12,4 +12,5 @@ export const env = {
   r2AccessKey: required("R2_ACCESS_KEY"),
   r2SecretKey: required("R2_SECRET_KEY"),
   r2Bucket: required("R2_BUCKET"),
+  apiKey: process.env.API_KEY || null,
 } as const;

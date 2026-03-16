@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import { createMiddleware } from "hono/factory";
 import { clerkAuth } from "../middleware/auth";
 import { uploadToR2, downloadFromR2 } from "../lib/r2";
+import { env } from "../lib/env";
 
 const R2_COOKIES_KEY = (userId: string) => `cookies/${userId}/yt-cookies.txt`;
 
@@ -9,8 +11,29 @@ function localCookiesPath(userId: string) {
 }
 
 type AuthEnv = { Variables: { userId: string } };
+
+/**
+ * Auth middleware that accepts either:
+ * - Clerk Bearer token (from web app)
+ * - API key via X-API-Key header + X-User-Id header (from CLI script)
+ */
+const cookiesAuth = createMiddleware<AuthEnv>(async (c, next) => {
+  const apiKey = c.req.header("X-API-Key");
+  if (apiKey && env.apiKey && apiKey === env.apiKey) {
+    const userId = c.req.header("X-User-Id");
+    if (!userId) {
+      return c.json({ error: "Missing X-User-Id header" }, 400);
+    }
+    c.set("userId", userId);
+    return next();
+  }
+
+  // Fall back to Clerk auth
+  return clerkAuth(c, next);
+});
+
 export const cookiesRoute = new Hono<AuthEnv>();
-cookiesRoute.use("/cookies", clerkAuth);
+cookiesRoute.use("/cookies", cookiesAuth);
 
 cookiesRoute.post("/cookies", async (c) => {
   const userId = c.get("userId");
