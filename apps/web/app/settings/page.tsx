@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 export default function SettingsPage() {
+  const { getToken } = useAuth();
   const [loaded, setLoaded] = useState<boolean | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -12,11 +14,19 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/cookies`)
-      .then((r) => r.json())
-      .then((data: { loaded: boolean }) => setLoaded(data.loaded))
-      .catch(() => setLoaded(false));
-  }, []);
+    (async () => {
+      try {
+        const token = await getToken();
+        const r = await fetch(`${API_URL}/cookies`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data: { loaded: boolean } = await r.json();
+        setLoaded(data.loaded);
+      } catch {
+        setLoaded(false);
+      }
+    })();
+  }, [getToken]);
 
   async function uploadFile(file: File) {
     setStatus(null);
@@ -26,8 +36,10 @@ export default function SettingsPage() {
     formData.append("cookies", file);
 
     try {
+      const token = await getToken();
       const res = await fetch(`${API_URL}/cookies`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
         body: formData,
       });
       const data = await res.json();
