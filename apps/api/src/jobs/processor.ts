@@ -5,7 +5,8 @@ import { downloadJobs, tracks, userTracks } from "@metropol/db";
 import type { WsJobStatusMessage, DownloadJobStatus } from "@metropol/types";
 import { env } from "../lib/env";
 import { uploadToR2, deleteFromR2 } from "../lib/r2";
-import { getMetadata, downloadAudio } from "./ytdlp";
+import { getMetadata, downloadAudio, type YtDlpOptions } from "./ytdlp";
+import { loadUserCookies } from "../routes/cookies";
 import { setProcessor, type QueueJob } from "./queue";
 import { broadcast } from "../ws/connections";
 
@@ -50,15 +51,19 @@ async function processJob(job: QueueJob) {
     await updateJobStatus(jobId, { status: "downloading" });
     broadcast(userId, buildStatusMessage(jobId, "downloading"));
 
-    // Step 2: Get youtubeId from the job record
+    // Step 2: Load user's cookies from R2
+    const cookiesPath = await loadUserCookies(userId);
+    const ytOpts: YtDlpOptions = { cookiesPath };
+
+    // Step 3: Get youtubeId from the job record
     const [jobRecord] = await db
       .select()
       .from(downloadJobs)
       .where(eq(downloadJobs.id, jobId));
     const youtubeId = jobRecord?.youtubeId ?? null;
 
-    // Step 3: Get metadata
-    const meta = await getMetadata(url);
+    // Step 4: Get metadata
+    const meta = await getMetadata(url, ytOpts);
     await updateJobStatus(jobId, {
       title: meta.title,
       artist: meta.artist,
@@ -73,11 +78,11 @@ async function processJob(job: QueueJob) {
       }),
     );
 
-    // Step 4: Download audio
-    const result = await downloadAudio(url);
+    // Step 5: Download audio
+    const result = await downloadAudio(url, ytOpts);
     cleanupDir = result.cleanupDir;
 
-    // Step 5: Upload to R2 (global path — no userId prefix)
+    // Step 6: Upload to R2 (global path — no userId prefix)
     await updateJobStatus(jobId, { status: "uploading" });
     broadcast(userId, buildStatusMessage(jobId, "uploading", {
       title: meta.title,
@@ -90,7 +95,7 @@ async function processJob(job: QueueJob) {
     const fileData = await Bun.file(result.filePath).arrayBuffer();
     await uploadToR2(fileKey, new Uint8Array(fileData), "audio/mp4");
 
-    // Step 6: Insert into global tracks table (no userId)
+    // Step 7: Insert into global tracks table (no userId)
     if (!youtubeId) {
       throw new Error("youtubeId missing from job — cannot insert global track");
     }
@@ -106,13 +111,13 @@ async function processJob(job: QueueJob) {
       sourceUrl: url,
     });
 
-    // Step 7: Link track to user in user_tracks
+    // Step 8: Link track to user in user_tracks
     await db
       .insert(userTracks)
       .values({ userId, trackId })
       .onConflictDoNothing();
 
-    // Step 8: Mark job completed
+    // Step 9: Mark job completed
     await updateJobStatus(jobId, {
       status: "completed",
       trackId,

@@ -1,5 +1,6 @@
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -36,4 +37,18 @@ export async function deleteFromR2(fileKey: string): Promise<void> {
       Key: fileKey,
     }),
   );
+}
+
+export async function downloadFromR2(fileKey: string): Promise<string | null> {
+  try {
+    const res = await client.send(
+      new GetObjectCommand({
+        Bucket: env.r2Bucket,
+        Key: fileKey,
+      }),
+    );
+    return (await res.Body?.transformToString()) ?? null;
+  } catch {
+    return null;
+  }
 }

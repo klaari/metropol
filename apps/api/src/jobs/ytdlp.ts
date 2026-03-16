@@ -2,15 +2,19 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+export interface YtDlpOptions {
+  cookiesPath?: string | null;
+}
+
 export interface VideoMetadata {
   title: string;
   artist: string;
   duration: number;
 }
 
-export async function getMetadata(url: string): Promise<VideoMetadata> {
+export async function getMetadata(url: string, opts?: YtDlpOptions): Promise<VideoMetadata> {
   const args = ["yt-dlp", "--dump-json", "--no-download", "--js-runtimes", "node", "-v"];
-  if (process.env.YT_COOKIES_FILE) args.push("--cookies", process.env.YT_COOKIES_FILE);
+  if (opts?.cookiesPath) args.push("--cookies", opts.cookiesPath);
   args.push(url);
 
   console.log(`[yt-dlp] metadata cmd: ${args.join(" ")}`);
@@ -40,7 +44,7 @@ export interface DownloadResult {
   cleanupDir: string;
 }
 
-export async function downloadAudio(url: string): Promise<DownloadResult> {
+export async function downloadAudio(url: string, opts?: YtDlpOptions): Promise<DownloadResult> {
   const dir = await mkdtemp(join(tmpdir(), "metropol-"));
   const output = join(dir, "audio.%(ext)s");
 
@@ -53,7 +57,7 @@ export async function downloadAudio(url: string): Promise<DownloadResult> {
     "--audio-format", "m4a",
     "-o", output,
   ];
-  if (process.env.YT_COOKIES_FILE) args.push("--cookies", process.env.YT_COOKIES_FILE);
+  if (opts?.cookiesPath) args.push("--cookies", opts.cookiesPath);
   args.push(url);
 
   console.log(`[yt-dlp] download cmd: ${args.join(" ")}`);
