@@ -13,9 +13,11 @@ export interface VideoMetadata {
 }
 
 export async function getMetadata(url: string, opts?: YtDlpOptions): Promise<VideoMetadata> {
-  const args = ["yt-dlp", "--dump-json", "--no-download", "--js-runtimes", "node", "-v"];
+  const cleanUrl = url.trim();
+  const nodePath = process.env.NODE_PATH || "/usr/bin/node";
+  const args = ["yt-dlp", "--dump-json", "--no-download", "--js-runtimes", `node:${nodePath}`, "-v"];
   if (opts?.cookiesPath) args.push("--cookies", opts.cookiesPath);
-  args.push(url);
+  args.push(cleanUrl);
 
   console.log(`[yt-dlp] metadata cmd: ${args.join(" ")}`);
   const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
@@ -45,12 +47,14 @@ export interface DownloadResult {
 }
 
 export async function downloadAudio(url: string, opts?: YtDlpOptions): Promise<DownloadResult> {
+  const cleanUrl = url.trim();
   const dir = await mkdtemp(join(tmpdir(), "metropol-"));
   const output = join(dir, "audio.%(ext)s");
+  const nodePath = process.env.NODE_PATH || "/usr/bin/node";
 
   const args = [
     "yt-dlp",
-    "--js-runtimes", "node",
+    "--js-runtimes", `node:${nodePath}`,
     "-v",
     "-f", "bestaudio[ext=m4a]/bestaudio",
     "--extract-audio",
@@ -58,7 +62,7 @@ export async function downloadAudio(url: string, opts?: YtDlpOptions): Promise<D
     "-o", output,
   ];
   if (opts?.cookiesPath) args.push("--cookies", opts.cookiesPath);
-  args.push(url);
+  args.push(cleanUrl);
 
   console.log(`[yt-dlp] download cmd: ${args.join(" ")}`);
   const proc = Bun.spawn(args, { stdout: "pipe", stderr: "pipe" });
