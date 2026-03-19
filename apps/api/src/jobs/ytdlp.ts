@@ -45,9 +45,13 @@ export async function getMetadata(url: string, opts?: YtDlpOptions): Promise<Vid
   }
 
   const info = JSON.parse(stdout);
+  // Prefer music metadata tags over YouTube channel name
+  const artist: string =
+    info.artist || info.creator || info.uploader || info.channel || "Unknown";
+
   return {
     title: info.title || "Unknown",
-    artist: info.uploader || info.channel || "Unknown",
+    artist,
     duration: Math.round(info.duration || 0),
   };
 }
