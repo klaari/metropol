@@ -178,18 +178,45 @@ export default function DownloadList({ jobs, setJobs }: Props) {
   // Flush any buffered WS updates for jobs that just appeared in the list
   useEffect(() => {
     if (pendingUpdates.current.size === 0) return;
+    const snapshot = new Map(pendingUpdates.current);
+    pendingUpdates.current.clear();
     setJobs((prev) => {
       let changed = false;
       const updated = prev.map((j) => {
-        const pending = pendingUpdates.current.get(j.id);
+        const pending = snapshot.get(j.id);
         if (!pending) return j;
-        pendingUpdates.current.delete(j.id);
         changed = true;
         return { ...j, ...pending };
       });
       return changed ? updated : prev;
     });
   }, [jobs, setJobs]);
+
+  // Polling fallback: re-fetch when any job is in a non-terminal state
+  const hasActiveJobs = jobs.some(
+    (j) => j.status === "queued" || j.status === "downloading" || j.status === "uploading"
+  );
+  useEffect(() => {
+    if (!hasActiveJobs) return;
+    const poll = async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API_URL}/downloads`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as DownloadJob[];
+        data.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        setJobs(data);
+      } catch {
+        // silently fail
+      }
+    };
+    const id = setInterval(poll, 3000);
+    return () => clearInterval(id);
+  }, [hasActiveJobs, getToken, setJobs]);
 
   const handleRetry = async (job: DownloadJob) => {
     try {
