@@ -43,10 +43,17 @@ export async function deleteFromR2(fileKey: string): Promise<void> {
 export async function getPresignedUrl(
   fileKey: string,
   expiresIn = 3600,
+  filename?: string,
 ): Promise<string> {
   return getSignedUrl(
     client,
-    new GetObjectCommand({ Bucket: env.r2Bucket, Key: fileKey }),
+    new GetObjectCommand({
+      Bucket: env.r2Bucket,
+      Key: fileKey,
+      ...(filename
+        ? { ResponseContentDisposition: `inline; filename="${filename}"` }
+        : {}),
+    }),
     { expiresIn },
   );
 }

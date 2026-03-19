@@ -149,7 +149,7 @@ downloadRoute.get("/tracks/:id/stream", async (c) => {
 
   // Verify the user owns this track
   const [row] = await db
-    .select({ fileKey: tracks.fileKey })
+    .select({ fileKey: tracks.fileKey, title: tracks.title, artist: tracks.artist })
     .from(userTracks)
     .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
     .where(and(eq(userTracks.userId, userId), eq(tracks.id, trackId)));
@@ -158,7 +158,11 @@ downloadRoute.get("/tracks/:id/stream", async (c) => {
     return c.json({ error: "Track not found" }, 404);
   }
 
-  const url = await getPresignedUrl(row.fileKey, 3600);
+  const filename = row.artist
+    ? `${row.artist} - ${row.title}.m4a`
+    : `${row.title}.m4a`;
+
+  const url = await getPresignedUrl(row.fileKey, 3600, filename);
   return c.json({ url });
 });
 
