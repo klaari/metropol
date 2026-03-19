@@ -131,7 +131,15 @@ downloadRoute.get("/tracks", async (c) => {
     .where(eq(userTracks.userId, userId))
     .orderBy(desc(userTracks.addedAt));
 
-  return c.json(rows);
+  // Flatten join result into LibraryTrack shape
+  const libraryTracks = rows.map(({ user_tracks, tracks: t }) => ({
+    ...t,
+    userTrackId: user_tracks.id,
+    addedAt: user_tracks.addedAt,
+    originalBpm: user_tracks.originalBpm,
+  }));
+
+  return c.json(libraryTracks);
 });
 
 downloadRoute.get("/tracks/discover", async (_c) => {
