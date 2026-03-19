@@ -83,6 +83,8 @@ export default function DownloadList({ jobs, setJobs }: Props) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  // Buffer WS updates that arrive before the job is in the list (race condition)
+  const pendingUpdates = useRef<Map<string, Partial<DownloadJob>>>(new Map());
 
   // Initial load
   useEffect(() => {
@@ -125,7 +127,18 @@ export default function DownloadList({ jobs, setJobs }: Props) {
 
           setJobs((prev) => {
             const idx = prev.findIndex((j) => j.id === msg.jobId);
-            if (idx === -1) return prev;
+            if (idx === -1) {
+              // Job not in list yet — buffer the update for when it arrives
+              pendingUpdates.current.set(msg.jobId, {
+                status: msg.status,
+                title: msg.title ?? undefined,
+                artist: msg.artist ?? undefined,
+                duration: msg.duration ?? undefined,
+                trackId: msg.trackId ?? undefined,
+                error: msg.error ?? undefined,
+              });
+              return prev;
+            }
             const updated = [...prev];
             updated[idx] = {
               ...updated[idx],
@@ -161,6 +174,22 @@ export default function DownloadList({ jobs, setJobs }: Props) {
       wsRef.current?.close();
     };
   }, [getToken, setJobs]);
+
+  // Flush any buffered WS updates for jobs that just appeared in the list
+  useEffect(() => {
+    if (pendingUpdates.current.size === 0) return;
+    setJobs((prev) => {
+      let changed = false;
+      const updated = prev.map((j) => {
+        const pending = pendingUpdates.current.get(j.id);
+        if (!pending) return j;
+        pendingUpdates.current.delete(j.id);
+        changed = true;
+        return { ...j, ...pending };
+      });
+      return changed ? updated : prev;
+    });
+  }, [jobs, setJobs]);
 
   const handleRetry = async (job: DownloadJob) => {
     try {
