@@ -4,6 +4,7 @@ import { createDb, downloadJobs, tracks, userTracks } from "@metropol/db";
 import { clerkAuth } from "../middleware/auth";
 import { env } from "../lib/env";
 import { enqueue } from "../jobs/queue";
+import { getPresignedUrl } from "../lib/r2";
 
 const db = createDb(env.databaseUrl);
 
@@ -140,6 +141,25 @@ downloadRoute.get("/tracks", async (c) => {
   }));
 
   return c.json(libraryTracks);
+});
+
+downloadRoute.get("/tracks/:id/stream", async (c) => {
+  const userId = c.get("userId");
+  const trackId = c.req.param("id");
+
+  // Verify the user owns this track
+  const [row] = await db
+    .select({ fileKey: tracks.fileKey })
+    .from(userTracks)
+    .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
+    .where(and(eq(userTracks.userId, userId), eq(tracks.id, trackId)));
+
+  if (!row) {
+    return c.json({ error: "Track not found" }, 404);
+  }
+
+  const url = await getPresignedUrl(row.fileKey, 3600);
+  return c.json({ url });
 });
 
 downloadRoute.get("/tracks/discover", async (_c) => {
