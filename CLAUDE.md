@@ -54,6 +54,14 @@ metropol-player/
 - Track file stored in R2 with key pattern: `{userId}/{trackId}.{ext}`
 - Playback position and rate persisted per track in `playback_state` table
 
+## Deployment
+
+| App | Platform | Notes |
+|-----|----------|-------|
+| `apps/api` | Railway | Bun + Hono API; auto-deploys from `main` branch |
+| `apps/web` | Vercel | Next.js web companion; auto-deploys from `main` branch |
+| `apps/mobile` | EAS Build | Android APK via `eas build`; OTA updates via `eas update` |
+
 ## Current Phase
 **Phase 1 — Core player. No backend server yet.**
 - Expo app + Clerk auth
