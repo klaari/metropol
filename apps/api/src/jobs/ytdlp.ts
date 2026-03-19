@@ -12,10 +12,21 @@ export interface VideoMetadata {
   duration: number;
 }
 
+function jsRuntimeArgs(): string[] {
+  // Use explicit NODE_PATH if set, otherwise try the current Bun runtime,
+  // then fall back to common node locations.
+  if (process.env.NODE_PATH) {
+    return ["--js-runtimes", `node:${process.env.NODE_PATH}`];
+  }
+  // process.execPath is the running Bun (or Node) binary — always correct on Railway
+  const runtime = process.execPath;
+  const isBun = runtime.toLowerCase().includes("bun");
+  return ["--js-runtimes", `${isBun ? "bun" : "node"}:${runtime}`];
+}
+
 export async function getMetadata(url: string, opts?: YtDlpOptions): Promise<VideoMetadata> {
   const cleanUrl = url.trim();
-  const nodePath = process.env.NODE_PATH || "/usr/bin/node";
-  const args = ["yt-dlp", "--dump-json", "--no-download", "--js-runtimes", `node:${nodePath}`, "-v"];
+  const args = ["yt-dlp", "--dump-json", "--no-download", ...jsRuntimeArgs(), "-v"];
   if (opts?.cookiesPath) args.push("--cookies", opts.cookiesPath);
   args.push(cleanUrl);
 
@@ -50,11 +61,10 @@ export async function downloadAudio(url: string, opts?: YtDlpOptions): Promise<D
   const cleanUrl = url.trim();
   const dir = await mkdtemp(join(tmpdir(), "metropol-"));
   const output = join(dir, "audio.%(ext)s");
-  const nodePath = process.env.NODE_PATH || "/usr/bin/node";
 
   const args = [
     "yt-dlp",
-    "--js-runtimes", `node:${nodePath}`,
+    ...jsRuntimeArgs(),
     "-v",
     "-f", "bestaudio[ext=m4a]/bestaudio",
     "--extract-audio",
