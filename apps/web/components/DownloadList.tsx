@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import type { DownloadJob, DownloadJobStatus, WsJobStatusMessage } from "@metropol/types";
 
@@ -86,27 +86,27 @@ export default function DownloadList({ jobs, setJobs }: Props) {
   // Buffer WS updates that arrive before the job is in the list (race condition)
   const pendingUpdates = useRef<Map<string, Partial<DownloadJob>>>(new Map());
 
+  const fetchJobs = useCallback(async () => {
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/downloads`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as DownloadJob[];
+      data.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      setJobs(data);
+    } catch {
+      // silently fail
+    }
+  }, [getToken, setJobs]);
+
   // Initial load
   useEffect(() => {
-    const loadJobs = async () => {
-      try {
-        const token = await getToken();
-        const res = await fetch(`${API_URL}/downloads`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = (await res.json()) as DownloadJob[];
-          data.sort(
-            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
-          setJobs(data);
-        }
-      } catch {
-        // silently fail
-      }
-    };
-    loadJobs();
-  }, [getToken, setJobs]);
+    fetchJobs();
+  }, [fetchJobs]);
 
   // WebSocket
   useEffect(() => {
@@ -198,25 +198,9 @@ export default function DownloadList({ jobs, setJobs }: Props) {
   );
   useEffect(() => {
     if (!hasActiveJobs) return;
-    const poll = async () => {
-      try {
-        const token = await getToken();
-        const res = await fetch(`${API_URL}/downloads`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = (await res.json()) as DownloadJob[];
-        data.sort(
-          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-        setJobs(data);
-      } catch {
-        // silently fail
-      }
-    };
-    const id = setInterval(poll, 3000);
+    const id = setInterval(fetchJobs, 3000);
     return () => clearInterval(id);
-  }, [hasActiveJobs, getToken, setJobs]);
+  }, [hasActiveJobs, fetchJobs]);
 
   const handleRetry = async (job: DownloadJob) => {
     try {
@@ -229,12 +213,9 @@ export default function DownloadList({ jobs, setJobs }: Props) {
         },
         body: JSON.stringify({ url: job.url }),
       });
-
       if (!res.ok) return;
-
-      const newJob = (await res.json()) as DownloadJob;
-      // Add new job at top; keep old failed one so user can see history
-      setJobs((prev) => [newJob, ...prev]);
+      // Re-fetch the full list so the new job appears at the top with correct state
+      await fetchJobs();
     } catch {
       // silently fail — user can try again
     }
