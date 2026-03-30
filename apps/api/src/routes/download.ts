@@ -126,6 +126,30 @@ downloadRoute.post("/downloads", async (c) => {
   return c.json(job, 201);
 });
 
+downloadRoute.delete("/downloads/:id", async (c) => {
+  const userId = c.get("userId");
+  const jobId = c.req.param("id");
+
+  const [job] = await db
+    .select()
+    .from(downloadJobs)
+    .where(and(eq(downloadJobs.id, jobId), eq(downloadJobs.userId, userId)));
+
+  if (!job) {
+    return c.json({ error: "Job not found" }, 404);
+  }
+
+  if (job.status === "downloading" || job.status === "uploading") {
+    return c.json({ error: "Cannot delete a job that is in progress" }, 409);
+  }
+
+  await db
+    .delete(downloadJobs)
+    .where(eq(downloadJobs.id, jobId));
+
+  return c.json({ ok: true });
+});
+
 downloadRoute.get("/downloads", async (c) => {
   const userId = c.get("userId");
 

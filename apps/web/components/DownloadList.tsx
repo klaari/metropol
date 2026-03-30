@@ -27,12 +27,14 @@ function formatDuration(seconds: number | null): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function FailedActions({
+function JobActions({
   job,
   onRetry,
+  onDismiss,
 }: {
   job: DownloadJob;
   onRetry: (job: DownloadJob) => Promise<void>;
+  onDismiss: (job: DownloadJob) => Promise<void>;
 }) {
   const [retrying, setRetrying] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -59,13 +61,15 @@ function FailedActions({
 
   return (
     <div className="flex gap-2 mt-1">
-      <button
-        onClick={handleRetry}
-        disabled={retrying}
-        className="text-xs bg-zinc-700 hover:bg-zinc-600 text-white px-2.5 py-1 rounded-full disabled:opacity-50 transition-colors"
-      >
-        {retrying ? "Retrying…" : "↺ Retry"}
-      </button>
+      {job.status === "failed" && (
+        <button
+          onClick={handleRetry}
+          disabled={retrying}
+          className="text-xs bg-zinc-700 hover:bg-zinc-600 text-white px-2.5 py-1 rounded-full disabled:opacity-50 transition-colors"
+        >
+          {retrying ? "Retrying…" : "↺ Retry"}
+        </button>
+      )}
       {job.error && (
         <button
           onClick={handleCopyError}
@@ -74,6 +78,12 @@ function FailedActions({
           {copied ? "✓ Copied" : "⎘ Copy error"}
         </button>
       )}
+      <button
+        onClick={() => onDismiss(job)}
+        className="text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 px-2.5 py-1 rounded-full transition-colors"
+      >
+        ✕ Dismiss
+      </button>
     </div>
   );
 }
@@ -214,10 +224,23 @@ export default function DownloadList({ jobs, setJobs }: Props) {
         body: JSON.stringify({ url: job.url }),
       });
       if (!res.ok) return;
-      // Re-fetch the full list so the new job appears at the top with correct state
       await fetchJobs();
     } catch {
       // silently fail — user can try again
+    }
+  };
+
+  const handleDismiss = async (job: DownloadJob) => {
+    try {
+      const token = await getToken();
+      const res = await fetch(`${API_URL}/downloads/${job.id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      setJobs((prev) => prev.filter((j) => j.id !== job.id));
+    } catch {
+      // silently fail
     }
   };
 
@@ -244,8 +267,8 @@ export default function DownloadList({ jobs, setJobs }: Props) {
             {job.error && (
               <p className="text-xs text-red-400 mt-0.5 line-clamp-2">{job.error}</p>
             )}
-            {job.status === "failed" && (
-              <FailedActions job={job} onRetry={handleRetry} />
+            {(job.status === "failed" || job.status === "queued") && (
+              <JobActions job={job} onRetry={handleRetry} onDismiss={handleDismiss} />
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0 pt-0.5">

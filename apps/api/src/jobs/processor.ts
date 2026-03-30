@@ -7,7 +7,7 @@ import { env } from "../lib/env";
 import { uploadToR2, deleteFromR2 } from "../lib/r2";
 import { getMetadata, downloadAudio, type YtDlpOptions } from "./ytdlp";
 import { loadUserCookies } from "../routes/cookies";
-import { setProcessor, type QueueJob } from "./queue";
+import { setProcessor, enqueue, type QueueJob } from "./queue";
 import { broadcast } from "../ws/connections";
 
 const db = createDb(env.databaseUrl);
@@ -176,5 +176,16 @@ export async function recoverStaleJobs() {
   for (const job of [...stale, ...staleUploading]) {
     console.log(`[processor] Resetting stale job ${job.id} to queued`);
     await updateJobStatus(job.id, { status: "queued" });
+  }
+
+  // Re-enqueue jobs left in "queued" state (in-memory queue lost on restart)
+  const queued = await db
+    .select()
+    .from(downloadJobs)
+    .where(eq(downloadJobs.status, "queued"));
+
+  for (const job of queued) {
+    console.log(`[processor] Re-enqueuing queued job ${job.id}`);
+    enqueue({ jobId: job.id, userId: job.userId, url: job.url });
   }
 }
