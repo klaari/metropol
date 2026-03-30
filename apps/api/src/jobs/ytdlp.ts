@@ -8,7 +8,7 @@ export interface YtDlpOptions {
 
 export interface VideoMetadata {
   title: string;
-  artist: string;
+  artist: string | null;
   duration: number;
 }
 
@@ -45,9 +45,10 @@ export async function getMetadata(url: string, opts?: YtDlpOptions): Promise<Vid
   }
 
   const info = JSON.parse(stdout);
-  // Prefer music metadata tags over YouTube channel name
-  const artist: string =
-    info.artist || info.creator || info.uploader || info.channel || "Unknown";
+  // Only use actual music metadata tags — never fall back to channel/uploader
+  // as that produces "Channel - Artist - Title" filenames when the title
+  // already contains the artist name.
+  const artist: string = info.artist || info.creator || null;
 
   return {
     title: info.title || "Unknown",
