@@ -164,6 +164,7 @@ export function initProcessor() {
 }
 
 export async function recoverStaleJobs() {
+  // Jobs stuck in downloading/uploading crashed mid-processing — mark failed
   const stale = await db
     .select()
     .from(downloadJobs)
@@ -174,11 +175,24 @@ export async function recoverStaleJobs() {
     .where(eq(downloadJobs.status, "uploading"));
 
   for (const job of [...stale, ...staleUploading]) {
-    console.log(`[processor] Resetting stale job ${job.id} to queued`);
-    await updateJobStatus(job.id, { status: "queued" });
+    console.log(`[processor] Marking crashed job ${job.id} as failed`);
+    await updateJobStatus(job.id, {
+      status: "failed",
+      error: "Server restarted while job was in progress",
+      completedAt: new Date(),
+    });
+    broadcast(
+      job.userId,
+      buildStatusMessage(job.id, "failed", {
+        title: job.title,
+        artist: job.artist,
+        duration: job.duration,
+        error: "Server restarted while job was in progress",
+      }),
+    );
   }
 
-  // Re-enqueue jobs left in "queued" state (in-memory queue lost on restart)
+  // Re-enqueue jobs that were queued but never started
   const queued = await db
     .select()
     .from(downloadJobs)
