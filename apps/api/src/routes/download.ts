@@ -1,15 +1,31 @@
+import { unlink } from "node:fs/promises";
 import { Hono } from "hono";
 import { eq, and, desc, notInArray } from "drizzle-orm";
 import { createDb, downloadJobs, tracks, userTracks } from "@metropol/db";
 import { clerkAuth } from "../middleware/auth";
 import { env } from "../lib/env";
 import { enqueue } from "../jobs/queue";
-import { getPresignedUrl } from "../lib/r2";
+import { getPresignedUrl, uploadToR2 } from "../lib/r2";
 
 const db = createDb(env.databaseUrl);
 
 const YOUTUBE_URL_RE =
   /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\//;
+
+const MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // 200 MB
+
+const AUDIO_MIME_TO_EXT: Record<string, string> = {
+  "audio/mpeg": "mp3",
+  "audio/mp4": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/aac": "aac",
+  "audio/ogg": "ogg",
+  "audio/flac": "flac",
+  "audio/wav": "wav",
+  "audio/x-wav": "wav",
+};
+
+const ALLOWED_EXTENSIONS = new Set(Object.values(AUDIO_MIME_TO_EXT));
 
 function extractYoutubeId(url: string): string | null {
   const patterns = [
@@ -143,13 +159,99 @@ downloadRoute.get("/tracks", async (c) => {
   return c.json(libraryTracks);
 });
 
+downloadRoute.post("/tracks/upload", async (c) => {
+  const userId = c.get("userId");
+  const formData = await c.req.formData();
+
+  const file = formData.get("file");
+  if (!file || !(file instanceof File)) {
+    return c.json({ error: "file is required" }, 400);
+  }
+
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return c.json({ error: "File too large (max 200 MB)" }, 400);
+  }
+
+  const extFromName = file.name.match(/\.(\w+)$/)?.[1]?.toLowerCase();
+  const format = AUDIO_MIME_TO_EXT[file.type]
+    ?? (extFromName && ALLOWED_EXTENSIONS.has(extFromName) ? extFromName : null);
+  if (!format) {
+    return c.json({ error: "Unsupported audio format" }, 400);
+  }
+
+  const title = (formData.get("title") as string | null)?.trim()
+    || file.name.replace(/\.\w+$/, "");
+  const artist = (formData.get("artist") as string | null)?.trim() || null;
+
+  const trackId = crypto.randomUUID();
+  const fileKey = `tracks/${trackId}.${format}`;
+  const buffer = new Uint8Array(await file.arrayBuffer());
+
+  const tmpPath = `/tmp/metropol-upload-${trackId}.${format}`;
+  let duration: number | null = null;
+  try {
+    await Bun.write(tmpPath, buffer);
+    const proc = Bun.spawn(
+      ["ffprobe", "-v", "quiet", "-print_format", "json", "-show_format", tmpPath],
+      { stdout: "pipe", stderr: "pipe" },
+    );
+    const output = await new Response(proc.stdout).text();
+    await proc.exited;
+    const parsed = JSON.parse(output);
+    if (parsed.format?.duration) {
+      duration = Math.round(Number(parsed.format.duration));
+    }
+  } catch {
+    // duration stays null
+  } finally {
+    unlink(tmpPath).catch(() => {});
+  }
+
+  await uploadToR2(fileKey, buffer, file.type || "application/octet-stream");
+
+  const [track] = await db
+    .insert(tracks)
+    .values({
+      id: trackId,
+      youtubeId: `upload:${trackId}`,
+      title,
+      artist,
+      duration,
+      fileKey,
+      fileSize: buffer.byteLength,
+      format,
+      sourceUrl: null,
+    })
+    .returning();
+
+  const [userTrack] = await db
+    .insert(userTracks)
+    .values({ userId, trackId: track.id })
+    .returning();
+
+  return c.json(
+    {
+      ...track,
+      userTrackId: userTrack.id,
+      addedAt: userTrack.addedAt,
+      originalBpm: userTrack.originalBpm,
+    },
+    201,
+  );
+});
+
 downloadRoute.get("/tracks/:id/stream", async (c) => {
   const userId = c.get("userId");
   const trackId = c.req.param("id");
 
   // Verify the user owns this track
   const [row] = await db
-    .select({ fileKey: tracks.fileKey, title: tracks.title, artist: tracks.artist })
+    .select({
+      fileKey: tracks.fileKey,
+      title: tracks.title,
+      artist: tracks.artist,
+      format: tracks.format,
+    })
     .from(userTracks)
     .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
     .where(and(eq(userTracks.userId, userId), eq(tracks.id, trackId)));
@@ -158,9 +260,10 @@ downloadRoute.get("/tracks/:id/stream", async (c) => {
     return c.json({ error: "Track not found" }, 404);
   }
 
+  const ext = row.format ?? "m4a";
   const filename = row.artist
-    ? `${row.artist} - ${row.title}.m4a`
-    : `${row.title}.m4a`;
+    ? `${row.artist} - ${row.title}.${ext}`
+    : `${row.title}.${ext}`;
 
   const url = await getPresignedUrl(row.fileKey, 3600, filename);
   return c.json({ url });

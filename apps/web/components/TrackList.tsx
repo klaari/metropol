@@ -82,7 +82,7 @@ function TrackRow({
   );
 }
 
-export default function TrackList() {
+export default function TrackList({ refreshKey }: { refreshKey?: number }) {
   const { getToken } = useAuth();
   const [tracks, setTracks] = useState<LibraryTrack[]>([]);
   const [loading, setLoading] = useState(true);
@@ -97,10 +97,6 @@ export default function TrackList() {
         });
         if (!res.ok) throw new Error("Failed to load tracks");
         const data = (await res.json()) as LibraryTrack[];
-        data.sort(
-          (a, b) =>
-            new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime()
-        );
         setTracks(data);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load tracks.");
@@ -110,7 +106,7 @@ export default function TrackList() {
     };
 
     loadTracks();
-  }, [getToken]);
+  }, [getToken, refreshKey]);
 
   if (loading) return <p className="text-zinc-500 text-sm">Loading…</p>;
   if (error) return <p className="text-red-400 text-sm">{error}</p>;
