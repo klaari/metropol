@@ -24,9 +24,22 @@ function jsRuntimeArgs(): string[] {
   return ["--js-runtimes", `${isBun ? "bun" : "node"}:${runtime}`];
 }
 
+/** Strip playlist/radio params so yt-dlp treats the URL as a single video. */
+function stripPlaylistParams(url: string): string {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete("list");
+    u.searchParams.delete("start_radio");
+    u.searchParams.delete("index");
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 export async function getMetadata(url: string, opts?: YtDlpOptions): Promise<VideoMetadata> {
-  const cleanUrl = url.trim();
-  const args = ["yt-dlp", "--dump-json", "--no-download", ...jsRuntimeArgs(), "-v"];
+  const cleanUrl = stripPlaylistParams(url.trim());
+  const args = ["yt-dlp", "--dump-json", "--no-download", "--no-playlist", ...jsRuntimeArgs(), "-v"];
   if (opts?.cookiesPath) args.push("--cookies", opts.cookiesPath);
   args.push(cleanUrl);
 
@@ -63,7 +76,7 @@ export interface DownloadResult {
 }
 
 export async function downloadAudio(url: string, opts?: YtDlpOptions): Promise<DownloadResult> {
-  const cleanUrl = url.trim();
+  const cleanUrl = stripPlaylistParams(url.trim());
   const dir = await mkdtemp(join(tmpdir(), "metropol-"));
   const output = join(dir, "audio.%(ext)s");
 
@@ -71,6 +84,7 @@ export async function downloadAudio(url: string, opts?: YtDlpOptions): Promise<D
     "yt-dlp",
     ...jsRuntimeArgs(),
     "-v",
+    "--no-playlist",
     "-f", "bestaudio[ext=m4a]/bestaudio",
     "--extract-audio",
     "--audio-format", "m4a",
