@@ -244,6 +244,10 @@ export default function DownloadList({ jobs, setJobs }: Props) {
     }
   };
 
+  const sessionExpired = jobs.some(
+    (j) => j.error?.includes("YouTube session expired")
+  );
+
   if (jobs.length === 0) {
     return (
       <p className="text-zinc-500 text-sm">No downloads yet. Paste a YouTube URL above.</p>
@@ -251,6 +255,22 @@ export default function DownloadList({ jobs, setJobs }: Props) {
   }
 
   return (
+    <div className="space-y-4">
+      {sessionExpired && (
+        <div className="flex items-start gap-3 bg-yellow-950 border border-yellow-700 rounded-lg px-4 py-3">
+          <span className="text-yellow-400 text-lg leading-none mt-0.5">⚠</span>
+          <div className="text-sm">
+            <p className="text-yellow-300 font-medium">YouTube session expired</p>
+            <p className="text-yellow-500 mt-0.5">
+              Your cookies are no longer valid.{" "}
+              <a href="/settings" className="underline text-yellow-300 hover:text-yellow-100">
+                Go to Settings
+              </a>{" "}
+              to upload fresh cookies.
+            </p>
+          </div>
+        </div>
+      )}
     <ul className="space-y-2">
       {jobs.map((job) => (
         <li
@@ -286,5 +306,6 @@ export default function DownloadList({ jobs, setJobs }: Props) {
         </li>
       ))}
     </ul>
+    </div>
   );
 }

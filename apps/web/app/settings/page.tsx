@@ -75,9 +75,16 @@ export default function SettingsPage() {
       <section className="space-y-4">
         <h2 className="text-lg font-medium text-zinc-200">YouTube Cookies</h2>
         <p className="text-sm text-zinc-400">
-          Upload a <code className="text-zinc-300">cookies.txt</code> file exported from your browser to enable
-          downloading age-restricted or member-only YouTube content.
+          Upload a <code className="text-zinc-300">cookies.txt</code> file exported from your browser.
+          Required to download YouTube content — sessions expire every few weeks.
         </p>
+        <ol className="text-sm text-zinc-500 space-y-1 list-decimal list-inside">
+          <li>Open a <span className="text-zinc-300">private/incognito</span> browser window and log into YouTube</li>
+          <li>In the same tab, navigate to <code className="text-zinc-300">youtube.com/robots.txt</code></li>
+          <li>Install <span className="text-zinc-300">Get cookies.txt LOCALLY</span> (Chrome) or <span className="text-zinc-300">Cookie Quick Manager</span> (Firefox) and export <code className="text-zinc-300">youtube.com</code> cookies</li>
+          <li>Close the incognito window, then upload the file below</li>
+        </ol>
+        <p className="text-xs text-zinc-600">Using incognito prevents cookie rotation, so they stay valid much longer.</p>
 
         <div className="text-sm">
           {loaded === null ? (

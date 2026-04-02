@@ -133,9 +133,16 @@ async function processJob(job: QueueJob) {
       }),
     );
   } catch (err) {
-    const errorMsg =
-      err instanceof Error ? err.message : "Unknown error";
-    console.error(`[processor] Job ${jobId} failed:`, errorMsg);
+    const rawError = err instanceof Error ? err.message : "Unknown error";
+    // Detect YouTube auth failures and surface a clean, actionable message
+    const isAuthError =
+      rawError.includes("LOGIN_REQUIRED") ||
+      rawError.includes("Sign in to confirm") ||
+      rawError.includes("confirm you're not a bot");
+    const errorMsg = isAuthError
+      ? "YouTube session expired — please refresh your cookies in Settings."
+      : rawError;
+    console.error(`[processor] Job ${jobId} failed:`, rawError);
 
     // Clean up orphaned R2 object
     if (fileKey) {
