@@ -1,4 +1,4 @@
-import type { Track } from "@metropol/types";
+import type { LibraryTrack } from "@metropol/types";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 function formatDuration(seconds: number | null): string {
@@ -9,7 +9,7 @@ function formatDuration(seconds: number | null): string {
 }
 
 interface TrackItemProps {
-  track: Track;
+  track: LibraryTrack;
   onPress: () => void;
   onLongPress: () => void;
 }
@@ -24,23 +24,21 @@ export default function TrackItem({
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       onPress={onPress}
       onLongPress={onLongPress}
+      android_ripple={{ color: "rgba(255,255,255,0.08)" }}
     >
+      <View style={styles.artwork}>
+        <Text style={styles.artworkIcon}>♫</Text>
+      </View>
       <View style={styles.info}>
         <Text style={styles.title} numberOfLines={1}>
           {track.title}
         </Text>
-        {track.artist ? (
-          <Text style={styles.artist} numberOfLines={1}>
-            {track.artist}
-          </Text>
-        ) : null}
+        <Text style={styles.subtitle} numberOfLines={1}>
+          {track.artist || "Unknown artist"}
+          {track.originalBpm != null ? `  ·  ${track.originalBpm} BPM` : ""}
+        </Text>
       </View>
-      <View style={styles.meta}>
-        {track.originalBpm != null ? (
-          <Text style={styles.bpm}>{track.originalBpm} BPM</Text>
-        ) : null}
-        <Text style={styles.duration}>{formatDuration(track.duration)}</Text>
-      </View>
+      <Text style={styles.duration}>{formatDuration(track.duration)}</Text>
     </Pressable>
   );
 }
@@ -49,38 +47,41 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#222",
+    gap: 14,
   },
   pressed: {
-    backgroundColor: "#111",
+    backgroundColor: "rgba(255,255,255,0.05)",
+  },
+  artwork: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    backgroundColor: "#1a1a1a",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  artworkIcon: {
+    fontSize: 20,
+    color: "#555",
   },
   info: {
     flex: 1,
-    marginRight: 12,
+    gap: 3,
   },
   title: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "500",
+    fontWeight: "600",
   },
-  artist: {
-    color: "#888",
-    fontSize: 14,
-    marginTop: 2,
-  },
-  meta: {
-    alignItems: "flex-end",
-  },
-  bpm: {
-    color: "#888",
+  subtitle: {
+    color: "#777",
     fontSize: 13,
   },
   duration: {
-    color: "#666",
-    fontSize: 13,
-    marginTop: 2,
+    color: "#555",
+    fontSize: 12,
+    fontVariant: ["tabular-nums"],
   },
 });
