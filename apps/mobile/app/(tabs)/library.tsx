@@ -1,5 +1,5 @@
 import { tracks } from "@metropol/db";
-import type { Track } from "@metropol/types";
+import type { LibraryTrack, Track } from "@metropol/types";
 import { useAuth } from "@clerk/clerk-expo";
 import * as DocumentPicker from "expo-document-picker";
 import {
@@ -8,7 +8,7 @@ import {
 } from "expo-file-system/legacy";
 import { randomUUID } from "expo-crypto";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -17,6 +17,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -24,7 +25,7 @@ import {
 } from "react-native";
 import EditTrackModal from "../../components/EditTrackModal";
 import TrackItem from "../../components/TrackItem";
-import { getDb } from "../lib/db";
+import { getDb } from "../../lib/db";
 import { buildFileKey, getUploadUrl } from "../../lib/r2";
 import { type SortOption, useLibraryStore } from "../../store/library";
 import { usePlaylistsStore } from "../../store/playlists";
@@ -131,7 +132,7 @@ export default function LibraryScreen() {
       console.log("[import] inserting into DB…");
       const title = file.name.replace(/\.[^.]+$/, "");
 
-      const [inserted] = await db
+      const [inserted] = await getDb()
         .insert(tracks)
         .values({
           id: trackId,
@@ -251,11 +252,47 @@ export default function LibraryScreen() {
     }
   }
 
+  const sections = useMemo(() => {
+    if (sort !== "date") return [{ title: "", data: trackList }];
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const weekAgo = new Date(today.getTime() - 7 * 86400000);
+
+    const groups: Record<string, LibraryTrack[]> = {};
+    const order: string[] = [];
+    for (const track of trackList) {
+      const added = new Date(track.addedAt);
+      let label: string;
+      if (added >= today) label = "Today";
+      else if (added >= weekAgo) label = "This Week";
+      else label = "Earlier";
+
+      if (!groups[label]) {
+        groups[label] = [];
+        order.push(label);
+      }
+      groups[label]!.push(track);
+    }
+    return order.map((title) => ({ title, data: groups[title]! }));
+  }, [trackList, sort]);
+
+  const trackCount = trackList.length;
+  const trackCountLabel = trackCount === 1 ? "1 track" : `${trackCount} tracks`;
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Library</Text>
-        <Pressable onPress={showSortPicker}>
+        <View>
+          <Text style={styles.headerTitle}>Library</Text>
+          {trackCount > 0 && (
+            <Text style={styles.headerSubtitle}>{trackCountLabel}</Text>
+          )}
+        </View>
+        <Pressable
+          style={styles.sortPill}
+          onPress={showSortPicker}
+          android_ripple={{ color: "rgba(255,255,255,0.1)", borderless: true }}
+        >
           <Text style={styles.sortButton}>{SORT_LABELS[sort]} ▾</Text>
         </Pressable>
       </View>
@@ -268,13 +305,20 @@ export default function LibraryScreen() {
         <View style={styles.center}>
           <Text style={styles.emptyText}>No tracks yet</Text>
           <Text style={styles.emptySubtext}>
-            Tap + to import audio files
+            Tap "Add track" to import audio files
           </Text>
         </View>
       ) : (
-        <FlatList
-          data={trackList}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id}
+          renderSectionHeader={({ section: { title } }) =>
+            title ? (
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionHeaderText}>{title}</Text>
+              </View>
+            ) : null
+          }
           renderItem={({ item }) => (
             <TrackItem
               track={item}
@@ -282,6 +326,9 @@ export default function LibraryScreen() {
               onLongPress={() => showTrackActions(item)}
             />
           )}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          contentContainerStyle={styles.listContent}
+          stickySectionHeadersEnabled={false}
         />
       )}
 
@@ -290,8 +337,13 @@ export default function LibraryScreen() {
           <ActivityIndicator color="#000" />
         </View>
       ) : (
-        <Pressable style={styles.fab} onPress={handleImport}>
-          <Text style={styles.fabText}>+</Text>
+        <Pressable
+          style={styles.fab}
+          onPress={handleImport}
+          android_ripple={{ color: "rgba(0,0,0,0.15)" }}
+        >
+          <Text style={styles.fabIcon}>+</Text>
+          <Text style={styles.fabLabel}>Add track</Text>
         </Pressable>
       )}
 
@@ -391,9 +443,41 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
   },
+  headerSubtitle: {
+    color: "#666",
+    fontSize: 13,
+    marginTop: 2,
+  },
+  sortPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#1a1a1a",
+  },
   sortButton: {
-    color: "#888",
-    fontSize: 14,
+    color: "#999",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  sectionHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  sectionHeaderText: {
+    color: "#666",
+    fontSize: 12,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "#1a1a1a",
+    marginLeft: 78,
+  },
+  listContent: {
+    paddingBottom: 100,
   },
   center: {
     flex: 1,
@@ -413,24 +497,30 @@ const styles = StyleSheet.create({
   fab: {
     position: "absolute",
     bottom: 32,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#fff",
-    justifyContent: "center",
+    right: 20,
+    flexDirection: "row",
     alignItems: "center",
-    elevation: 4,
+    height: 48,
+    paddingHorizontal: 20,
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    elevation: 6,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
-    shadowRadius: 4,
+    shadowRadius: 6,
+    gap: 6,
   },
-  fabText: {
-    fontSize: 28,
-    fontWeight: "400",
+  fabIcon: {
+    fontSize: 22,
+    fontWeight: "500",
     color: "#000",
-    marginTop: -2,
+    marginTop: -1,
+  },
+  fabLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#000",
   },
   pickerContainer: {
     flex: 1,
