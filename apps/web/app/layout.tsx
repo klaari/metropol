@@ -16,7 +16,7 @@ export default function RootLayout({
   return (
     <ClerkProvider>
       <html lang="en">
-        <body className="bg-black text-white h-dvh flex flex-col overflow-hidden">
+        <body className="bg-black text-white h-dvh flex flex-col">
           <Nav />
           <main className="flex-1 overflow-y-auto max-w-3xl w-full mx-auto pb-20 sm:pb-0">{children}</main>
         </body>

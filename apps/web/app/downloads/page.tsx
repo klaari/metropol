@@ -61,15 +61,11 @@ export default function DownloadsPage() {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Scrollable job list */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <h1 className="text-3xl font-bold text-white mb-6">Downloads</h1>
-        <DownloadList jobs={jobs} setJobs={setJobs} />
-      </div>
+    <div className="px-4 py-6 space-y-6">
+      <h1 className="text-3xl font-bold text-white">Downloads</h1>
 
-      {/* Input bar — sticks to bottom inside the flex column */}
-      <div className="shrink-0 border-t border-zinc-900 bg-black px-3 py-2.5">
+      {/* Input bar */}
+      <div className="border border-zinc-900 bg-zinc-950 rounded-2xl px-3 py-2.5">
         <form onSubmit={handleSubmit} className="flex items-center gap-2">
           <input
             ref={inputRef}
@@ -77,19 +73,22 @@ export default function DownloadsPage() {
             value={url}
             onChange={(e) => { setUrl(e.target.value); setError(null); }}
             placeholder="Paste YouTube URL..."
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-full px-4 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600 text-sm"
+            className="flex-1 bg-transparent text-white placeholder-zinc-600 focus:outline-none text-sm py-1"
             disabled={submitting}
           />
           <button
             type="submit"
             disabled={submitting || !url.trim()}
-            className="w-10 h-10 rounded-full bg-white flex items-center justify-center disabled:opacity-20 hover:bg-zinc-100 transition-colors shrink-0"
+            className="w-9 h-9 rounded-full bg-white flex items-center justify-center disabled:opacity-20 hover:bg-zinc-100 transition-colors shrink-0"
           >
             <span className="text-black text-base leading-none">{submitting ? "…" : "↑"}</span>
           </button>
         </form>
         {error && <p className="text-red-400 text-xs mt-1.5 px-1">{error}</p>}
       </div>
+
+      {/* Job list */}
+      <DownloadList jobs={jobs} setJobs={setJobs} />
     </div>
   );
 }
