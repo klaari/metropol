@@ -16,8 +16,11 @@ export default function SignInScreen() {
   const { signIn, setActive, isLoaded } = useSignIn();
   const router = useRouter();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const devEmail = process.env.EXPO_PUBLIC_DEV_EMAIL ?? "";
+  const devPassword = process.env.EXPO_PUBLIC_DEV_PASSWORD ?? "";
+
+  const [email, setEmail] = useState(devEmail);
+  const [password, setPassword] = useState(devPassword);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -36,12 +39,14 @@ export default function SignInScreen() {
       if (result.status === "complete" && result.createdSessionId) {
         await setActive({ session: result.createdSessionId });
         router.replace("/(tabs)/library");
+      } else {
+        setError(`Sign in incomplete: status=${result.status}`);
       }
     } catch (err) {
       if (isClerkAPIResponseError(err)) {
         setError(err.errors[0]?.longMessage ?? "Sign in failed");
       } else {
-        setError("Something went wrong");
+        setError(err instanceof Error ? err.message : "Something went wrong");
       }
     } finally {
       setLoading(false);

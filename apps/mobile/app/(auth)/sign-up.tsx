@@ -103,6 +103,15 @@ export default function SignUpScreen() {
               <Text style={styles.buttonText}>Verify</Text>
             )}
           </Pressable>
+
+          <Pressable
+            style={styles.link}
+            onPress={() => setPendingVerification(false)}
+          >
+            <Text style={styles.linkText}>
+              ← Back to sign up
+            </Text>
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
     );
