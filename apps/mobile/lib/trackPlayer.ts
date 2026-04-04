@@ -3,8 +3,8 @@ let TrackPlayer: typeof import("react-native-track-player").default | null =
 
 try {
   TrackPlayer = require("react-native-track-player").default;
-} catch {
-  // Native module not available (Expo Go)
+} catch (e) {
+  console.error("[trackPlayer] Failed to load native module:", e);
 }
 
 /** True if the native module exists at all (i.e. running in a dev/production build) */
