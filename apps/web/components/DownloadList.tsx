@@ -3,16 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import type { DownloadJob, DownloadJobStatus, WsJobStatusMessage } from "@metropol/types";
+import Link from "next/link";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3000";
 
-const STATUS_STYLES: Record<DownloadJobStatus, string> = {
-  queued: "bg-zinc-700 text-zinc-300",
-  downloading: "bg-blue-900 text-blue-300",
-  uploading: "bg-orange-900 text-orange-300",
-  completed: "bg-green-900 text-green-300",
-  failed: "bg-red-900 text-red-300",
+const STATUS_ICON: Record<DownloadJobStatus, { symbol: string; color: string }> = {
+  queued:      { symbol: "◷", color: "text-zinc-600" },
+  downloading: { symbol: "↓", color: "text-blue-400" },
+  uploading:   { symbol: "↑", color: "text-orange-400" },
+  completed:   { symbol: "✓", color: "text-zinc-600" },
+  failed:      { symbol: "✕", color: "text-red-500" },
 };
 
 interface Props {
@@ -27,73 +28,11 @@ function formatDuration(seconds: number | null): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-function JobActions({
-  job,
-  onRetry,
-  onDismiss,
-}: {
-  job: DownloadJob;
-  onRetry: (job: DownloadJob) => Promise<void>;
-  onDismiss: (job: DownloadJob) => Promise<void>;
-}) {
-  const [retrying, setRetrying] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const handleRetry = async () => {
-    setRetrying(true);
-    try {
-      await onRetry(job);
-    } finally {
-      setRetrying(false);
-    }
-  };
-
-  const handleCopyError = async () => {
-    if (!job.error) return;
-    try {
-      await navigator.clipboard.writeText(job.error);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // fallback: select text
-    }
-  };
-
-  return (
-    <div className="flex gap-2 mt-1">
-      {job.status === "failed" && (
-        <button
-          onClick={handleRetry}
-          disabled={retrying}
-          className="text-xs bg-zinc-700 hover:bg-zinc-600 text-white px-2.5 py-1 rounded-full disabled:opacity-50 transition-colors"
-        >
-          {retrying ? "Retrying…" : "↺ Retry"}
-        </button>
-      )}
-      {job.error && (
-        <button
-          onClick={handleCopyError}
-          className="text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 px-2.5 py-1 rounded-full transition-colors"
-        >
-          {copied ? "✓ Copied" : "⎘ Copy error"}
-        </button>
-      )}
-      <button
-        onClick={() => onDismiss(job)}
-        className="text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-300 px-2.5 py-1 rounded-full transition-colors"
-      >
-        ✕ Dismiss
-      </button>
-    </div>
-  );
-}
-
 export default function DownloadList({ jobs, setJobs }: Props) {
   const { getToken } = useAuth();
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
-  // Buffer WS updates that arrive before the job is in the list (race condition)
   const pendingUpdates = useRef<Map<string, Partial<DownloadJob>>>(new Map());
 
   const fetchJobs = useCallback(async () => {
@@ -104,21 +43,17 @@ export default function DownloadList({ jobs, setJobs }: Props) {
       });
       if (!res.ok) return;
       const data = (await res.json()) as DownloadJob[];
-      data.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      data.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       setJobs(data);
     } catch {
       // silently fail
     }
   }, [getToken, setJobs]);
 
-  // Initial load
   useEffect(() => {
     fetchJobs();
   }, [fetchJobs]);
 
-  // WebSocket
   useEffect(() => {
     mountedRef.current = true;
 
@@ -138,7 +73,6 @@ export default function DownloadList({ jobs, setJobs }: Props) {
           setJobs((prev) => {
             const idx = prev.findIndex((j) => j.id === msg.jobId);
             if (idx === -1) {
-              // Job not in list yet — buffer the update for when it arrives
               pendingUpdates.current.set(msg.jobId, {
                 status: msg.status,
                 title: msg.title ?? undefined,
@@ -150,20 +84,10 @@ export default function DownloadList({ jobs, setJobs }: Props) {
               return prev;
             }
             const updated = [...prev];
-            updated[idx] = {
-              ...updated[idx],
-              status: msg.status,
-              title: msg.title,
-              artist: msg.artist,
-              duration: msg.duration,
-              trackId: msg.trackId,
-              error: msg.error,
-            };
+            updated[idx] = { ...updated[idx], status: msg.status, title: msg.title, artist: msg.artist, duration: msg.duration, trackId: msg.trackId, error: msg.error };
             return updated;
           });
-        } catch {
-          // ignore parse errors
-        }
+        } catch { /* ignore */ }
       };
 
       ws.onclose = () => {
@@ -171,9 +95,7 @@ export default function DownloadList({ jobs, setJobs }: Props) {
         reconnectTimer.current = setTimeout(connect, 3000);
       };
 
-      ws.onerror = () => {
-        ws.close();
-      };
+      ws.onerror = () => ws.close();
     };
 
     connect();
@@ -185,7 +107,6 @@ export default function DownloadList({ jobs, setJobs }: Props) {
     };
   }, [getToken, setJobs]);
 
-  // Flush any buffered WS updates for jobs that just appeared in the list
   useEffect(() => {
     if (pendingUpdates.current.size === 0) return;
     const snapshot = new Map(pendingUpdates.current);
@@ -202,10 +123,7 @@ export default function DownloadList({ jobs, setJobs }: Props) {
     });
   }, [jobs, setJobs]);
 
-  // Polling fallback: re-fetch when any job is in a non-terminal state
-  const hasActiveJobs = jobs.some(
-    (j) => j.status === "queued" || j.status === "downloading" || j.status === "uploading"
-  );
+  const hasActiveJobs = jobs.some((j) => j.status === "queued" || j.status === "downloading" || j.status === "uploading");
   useEffect(() => {
     if (!hasActiveJobs) return;
     const id = setInterval(fetchJobs, 3000);
@@ -217,17 +135,12 @@ export default function DownloadList({ jobs, setJobs }: Props) {
       const token = await getToken();
       const res = await fetch(`${API_URL}/downloads`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ url: job.url }),
       });
       if (!res.ok) return;
       await fetchJobs();
-    } catch {
-      // silently fail — user can try again
-    }
+    } catch { /* silently fail */ }
   };
 
   const handleDismiss = async (job: DownloadJob) => {
@@ -239,73 +152,79 @@ export default function DownloadList({ jobs, setJobs }: Props) {
       });
       if (!res.ok) return;
       setJobs((prev) => prev.filter((j) => j.id !== job.id));
-    } catch {
-      // silently fail
-    }
+    } catch { /* silently fail */ }
   };
 
-  const sessionExpired = jobs.some(
-    (j) => j.error?.includes("YouTube session expired")
-  );
+  const sessionExpired = jobs.some((j) => j.error?.includes("YouTube session expired"));
 
-  if (jobs.length === 0) {
-    return (
-      <p className="text-zinc-500 text-sm">No downloads yet. Paste a YouTube URL above.</p>
-    );
-  }
+  if (jobs.length === 0) return null;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {sessionExpired && (
-        <div className="flex items-start gap-3 bg-yellow-950 border border-yellow-700 rounded-lg px-4 py-3">
-          <span className="text-yellow-400 text-lg leading-none mt-0.5">⚠</span>
-          <div className="text-sm">
-            <p className="text-yellow-300 font-medium">YouTube session expired</p>
-            <p className="text-yellow-500 mt-0.5">
-              Your cookies are no longer valid.{" "}
-              <a href="/settings" className="underline text-yellow-300 hover:text-yellow-100">
-                Go to Settings
-              </a>{" "}
-              to upload fresh cookies.
-            </p>
-          </div>
-        </div>
-      )}
-    <ul className="space-y-2">
-      {jobs.map((job) => (
-        <li
-          key={job.id}
-          className="flex items-start justify-between bg-zinc-900 rounded-lg px-4 py-3 gap-4"
+        <Link
+          href="/settings"
+          className="flex items-center gap-2.5 bg-[#1a1200] border border-[#3d2800] rounded-xl px-4 py-3 hover:border-[#5a3d00] transition-colors"
         >
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-white truncate">
-              {job.title ?? job.url}
-            </p>
-            {job.artist && (
-              <p className="text-xs text-zinc-400 mt-0.5">{job.artist}</p>
-            )}
-            {job.error && (
-              <p className="text-xs text-red-400 mt-0.5 line-clamp-2">{job.error}</p>
-            )}
-            {(job.status === "failed" || job.status === "queued") && (
-              <JobActions job={job} onRetry={handleRetry} onDismiss={handleDismiss} />
-            )}
-          </div>
-          <div className="flex items-center gap-3 shrink-0 pt-0.5">
-            {job.duration !== null && (
-              <span className="text-xs text-zinc-500">
-                {formatDuration(job.duration)}
-              </span>
-            )}
-            <span
-              className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[job.status]}`}
-            >
-              {job.status}
-            </span>
-          </div>
-        </li>
-      ))}
-    </ul>
+          <span className="text-[#f5a623] text-sm">⚠</span>
+          <p className="text-[#f5a623] text-sm flex-1">
+            YouTube cookies expired — tap to update in Settings
+          </p>
+        </Link>
+      )}
+
+      <div>
+        <p className="text-zinc-600 text-xs font-semibold uppercase tracking-widest mb-1 px-1">Recent</p>
+        <ul>
+          {jobs.map((job) => {
+            const icon = STATUS_ICON[job.status];
+            const isActive = job.status === "downloading" || job.status === "uploading" || job.status === "queued";
+            const isFailed = job.status === "failed";
+
+            return (
+              <li key={job.id} className="flex items-center gap-3 px-1 py-2">
+                {isActive && (
+                  <span className={`text-base w-5 text-center shrink-0 ${icon.color}`}>
+                    {icon.symbol}
+                  </span>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-zinc-300 text-sm truncate">{job.title ?? job.url}</p>
+                  {job.artist && (
+                    <p className="text-zinc-600 text-xs mt-0.5 truncate">{job.artist}</p>
+                  )}
+                  {job.error && (
+                    <p className="text-red-400 text-xs mt-0.5 line-clamp-2">{job.error}</p>
+                  )}
+                </div>
+                {job.duration && (
+                  <span className="text-zinc-600 text-xs tabular-nums shrink-0">
+                    {formatDuration(job.duration)}
+                  </span>
+                )}
+                {isFailed && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleRetry(job)}
+                      className="p-1.5 text-blue-400 hover:text-blue-300 transition-colors"
+                      title="Retry"
+                    >
+                      ↺
+                    </button>
+                    <button
+                      onClick={() => handleDismiss(job)}
+                      className="p-1.5 text-zinc-600 hover:text-zinc-400 transition-colors"
+                      title="Dismiss"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </div>
   );
 }

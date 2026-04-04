@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useClerk } from "@clerk/nextjs";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 export default function SettingsPage() {
   const { getToken } = useAuth();
+  const { signOut } = useClerk();
   const [loaded, setLoaded] = useState<boolean | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -31,6 +32,7 @@ export default function SettingsPage() {
   async function uploadFile(file: File) {
     setStatus(null);
     setIsError(false);
+    setUploading(true);
 
     const formData = new FormData();
     formData.append("cookies", file);
@@ -48,11 +50,13 @@ export default function SettingsPage() {
         setStatus((data as { error: string }).error ?? "Upload failed");
       } else {
         setLoaded(true);
-        setStatus("Cookies uploaded successfully ✓");
+        setStatus("Cookies uploaded successfully");
       }
     } catch {
       setIsError(true);
       setStatus("Network error — upload failed");
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -61,70 +65,61 @@ export default function SettingsPage() {
     if (file) uploadFile(file);
   }
 
-  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) uploadFile(file);
-  }
-
   return (
-    <div className="space-y-8">
-      <h1 className="text-2xl font-semibold">Settings</h1>
+    <div className="px-4 py-6 space-y-8 max-w-lg">
+      <h1 className="text-3xl font-bold text-white">Settings</h1>
 
+      {/* YouTube Cookies */}
       <section className="space-y-4">
-        <h2 className="text-lg font-medium text-zinc-200">YouTube Cookies</h2>
-        <p className="text-sm text-zinc-400">
-          Upload a <code className="text-zinc-300">cookies.txt</code> file exported from your browser.
-          Required to download YouTube content — sessions expire every few weeks.
+        <h2 className="text-lg font-semibold text-white">YouTube Cookies</h2>
+        <p className="text-zinc-500 text-sm leading-relaxed">
+          Upload a <code className="text-zinc-300">cookies.txt</code> file from your browser to authenticate YouTube downloads.
+          Use a browser extension like "Get cookies.txt LOCALLY" to export your YouTube cookies.
         </p>
-        <ol className="text-sm text-zinc-500 space-y-1 list-decimal list-inside">
-          <li>Open a <span className="text-zinc-300">private/incognito</span> browser window and log into YouTube</li>
-          <li>In the same tab, navigate to <code className="text-zinc-300">youtube.com/robots.txt</code></li>
-          <li>Install <span className="text-zinc-300">Get cookies.txt LOCALLY</span> (Chrome) or <span className="text-zinc-300">Cookie Quick Manager</span> (Firefox) and export <code className="text-zinc-300">youtube.com</code> cookies</li>
-          <li>Close the incognito window, then upload the file below</li>
-        </ol>
-        <p className="text-xs text-zinc-600">Using incognito prevents cookie rotation, so they stay valid much longer.</p>
 
-        <div className="text-sm">
+        {/* Status */}
+        <div className="flex items-center gap-2">
+          <span className="text-zinc-500 text-sm">Status:</span>
           {loaded === null ? (
-            <span className="text-zinc-500">Checking status…</span>
+            <span className="text-zinc-500 text-sm italic">Checking…</span>
           ) : loaded ? (
-            <span className="text-green-400">Cookies loaded ✓</span>
+            <span className="text-green-400 text-sm font-semibold">Cookies loaded ✓</span>
           ) : (
-            <span className="text-yellow-400">No cookies — YouTube downloads may fail</span>
+            <span className="text-[#f5a623] text-sm font-semibold">No cookies — downloads may fail</span>
           )}
         </div>
 
-        <div
-          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-            isDragging
-              ? "border-zinc-400 bg-zinc-800"
-              : "border-zinc-700 hover:border-zinc-500 bg-zinc-900"
-          }`}
+        {/* Upload button */}
+        <button
           onClick={() => fileInputRef.current?.click()}
-          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-          onDragLeave={() => setIsDragging(false)}
-          onDrop={handleDrop}
+          disabled={uploading}
+          className="w-full bg-white text-black text-base font-semibold py-3.5 rounded-xl disabled:opacity-60 hover:bg-zinc-100 transition-colors"
         >
-          <p className="text-zinc-400 text-sm">
-            Drop <span className="text-white font-medium">cookies.txt</span> here or{" "}
-            <span className="text-white underline">click to browse</span>
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt,text/plain"
-            className="hidden"
-            onChange={handleFileChange}
-          />
-        </div>
+          {uploading ? "Uploading…" : "Upload cookies.txt"}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".txt,text/plain"
+          className="hidden"
+          onChange={handleFileChange}
+        />
 
         {status && (
-          <p className={`text-sm ${isError ? "text-red-400" : "text-green-400"}`}>
+          <p className={`text-sm text-center ${isError ? "text-red-400" : "text-green-400"}`}>
             {status}
           </p>
         )}
+      </section>
+
+      {/* Sign Out */}
+      <section>
+        <button
+          onClick={() => signOut()}
+          className="w-full border border-zinc-800 text-red-500 text-base font-semibold py-3.5 rounded-xl hover:border-zinc-700 transition-colors"
+        >
+          Sign Out
+        </button>
       </section>
     </div>
   );

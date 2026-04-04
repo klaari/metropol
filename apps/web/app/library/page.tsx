@@ -1,19 +1,14 @@
 "use client";
 
-import { useState } from "react";
 import TrackList from "@/components/TrackList";
-import UploadForm from "@/components/UploadForm";
 
 export default function LibraryPage() {
-  const [refreshKey, setRefreshKey] = useState(0);
-
   return (
-    <div>
-      <h1 className="text-2xl font-semibold mb-6">Library</h1>
-      <div className="mb-6">
-        <UploadForm onUploaded={() => setRefreshKey((k) => k + 1)} />
+    <div className="px-0">
+      <div className="px-4 pt-6 pb-2">
+        <h1 className="text-3xl font-bold text-white">Library</h1>
       </div>
-      <TrackList refreshKey={refreshKey} />
+      <TrackList />
     </div>
   );
 }
