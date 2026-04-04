@@ -1,4 +1,4 @@
-import { playbackState, tracks } from "@metropol/db";
+import { playbackState, tracks, userTracks } from "@metropol/db";
 import type { Track } from "@metropol/types";
 import { eq, and } from "drizzle-orm";
 import { create } from "zustand";
@@ -10,6 +10,7 @@ interface PlayerState {
   currentTrack: Track | null;
   playbackRate: number;
   currentPlaylistId: string | null;
+  debugInfo: string;
 
   loadTrack: (trackId: string, userId: string) => Promise<void>;
   setRate: (rate: number, userId: string) => Promise<void>;
@@ -24,7 +25,7 @@ async function upsertPlaybackState(
   trackId: string,
   fields: { playbackRate?: number; lastPosition?: number },
 ) {
-  await db
+  await getDb()
     .insert(playbackState)
     .values({
       userId,
@@ -44,59 +45,94 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   currentTrack: null,
   playbackRate: 1.0,
   currentPlaylistId: null,
+  debugInfo: "",
 
   loadTrack: async (trackId, userId) => {
-    // Ensure the player is set up before calling any RNTP methods
-    const playerReady = await setupPlayer();
-    const tp = getTrackPlayer();
+    const log: string[] = [];
+    const dbg = (msg: string) => { log.push(msg); set({ debugInfo: log.join("\n") }); };
 
-    // Fetch track from DB
-    const [track] = await db
-      .select()
-      .from(tracks)
-      .where(and(eq(tracks.id, trackId), eq(tracks.userId, userId)));
+    try {
+      dbg("setupPlayer...");
+      const playerReady = await setupPlayer();
+      const tp = getTrackPlayer();
+      dbg(`ready=${playerReady} tp=${!!tp}`);
 
-    if (!track) return;
+      // Fetch track from DB (join through userTracks for userId scoping)
+      const [track] = await getDb()
+        .select({
+          id: tracks.id,
+          youtubeId: tracks.youtubeId,
+          title: tracks.title,
+          artist: tracks.artist,
+          duration: tracks.duration,
+          fileKey: tracks.fileKey,
+          fileSize: tracks.fileSize,
+          format: tracks.format,
+          sourceUrl: tracks.sourceUrl,
+          downloadedAt: tracks.downloadedAt,
+          originalBpm: userTracks.originalBpm,
+        })
+        .from(userTracks)
+        .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
+        .where(and(eq(tracks.id, trackId), eq(userTracks.userId, userId)));
 
-    // Fetch saved playback state
-    const [saved] = await db
-      .select()
-      .from(playbackState)
-      .where(
-        and(
-          eq(playbackState.trackId, trackId),
-          eq(playbackState.userId, userId),
-        ),
-      );
+      if (!track) { dbg("track NOT FOUND in DB"); return; }
+      dbg(`track="${track.title}" key=${track.fileKey}`);
 
-    const rate = saved?.playbackRate ?? 1.0;
-    const position = saved?.lastPosition ?? 0;
+      // Fetch saved playback state
+      const [saved] = await getDb()
+        .select()
+        .from(playbackState)
+        .where(
+          and(
+            eq(playbackState.trackId, trackId),
+            eq(playbackState.userId, userId),
+          ),
+        );
 
-    if (playerReady && tp) {
-      const url = await getDownloadUrl(track.fileKey);
+      const rate = saved?.playbackRate ?? 1.0;
+      const position = saved?.lastPosition ?? 0;
 
-      await tp.reset();
-      await tp.add({
-        url,
-        title: track.title,
-        artist: track.artist ?? undefined,
-        duration: track.duration ?? undefined,
-      });
+      if (playerReady && tp) {
+        const url = await getDownloadUrl(track.fileKey);
+        dbg(`url=${url?.substring(0, 80)}...`);
 
-      await tp.setRate(rate);
+        // Verify URL is accessible
+        try {
+          const resp = await fetch(url, { method: "HEAD" });
+          dbg(`HEAD ${resp.status} ${resp.headers.get("content-type")} len=${resp.headers.get("content-length")}`);
+        } catch (e: any) {
+          dbg(`HEAD failed: ${e?.message}`);
+        }
 
-      if (position > 0) {
-        await tp.seekTo(position);
+        await tp.reset();
+        await tp.add({
+          url,
+          title: track.title,
+          artist: track.artist ?? undefined,
+          duration: track.duration ?? undefined,
+        });
+
+        const queue = await tp.getQueue();
+        const state = await tp.getPlaybackState();
+        dbg(`queue=${queue.length} state=${JSON.stringify(state)}`);
+
+        await tp.setRate(rate);
+
+        if (position > 0) {
+          await tp.seekTo(position);
+        }
+        dbg("load complete");
+      } else {
+        dbg(`SKIP: ready=${playerReady} tp=${!!tp}`);
       }
+
+      set({ currentTrack: track as Track, playbackRate: rate });
+    } catch (e: any) {
+      dbg(`ERROR: ${e?.message ?? e}`);
     }
 
-    set({ currentTrack: track as Track, playbackRate: rate });
-
-    // Update lastPlayedAt
-    await db
-      .update(tracks)
-      .set({ lastPlayedAt: new Date() })
-      .where(eq(tracks.id, trackId));
+    // Update lastPlayedAt (if column exists — skip for now as schema has no lastPlayedAt)
   },
 
   setRate: async (rate, userId) => {

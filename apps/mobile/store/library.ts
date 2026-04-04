@@ -1,6 +1,6 @@
-import { tracks } from "@metropol/db";
-import type { Track } from "@metropol/types";
-import { eq, and, asc, desc } from "drizzle-orm";
+import { tracks, userTracks } from "@metropol/db";
+import type { LibraryTrack } from "@metropol/types";
+import { eq, desc } from "drizzle-orm";
 import { create } from "zustand";
 import { getDb } from "../lib/db";
 import { deleteObject } from "../lib/r2";
@@ -8,14 +8,14 @@ import { deleteObject } from "../lib/r2";
 export type SortOption = "date" | "title" | "bpm";
 
 interface LibraryState {
-  tracks: Track[];
+  tracks: LibraryTrack[];
   isLoading: boolean;
   error: string | null;
   sort: SortOption;
 
   setSort: (sort: SortOption) => void;
   fetchTracks: (userId: string) => Promise<void>;
-  addTrack: (track: Track) => void;
+  addTrack: (track: LibraryTrack) => void;
   updateTrack: (
     trackId: string,
     data: { title: string; artist: string | null; originalBpm: number | null },
@@ -23,7 +23,7 @@ interface LibraryState {
   deleteTrack: (trackId: string) => Promise<void>;
 }
 
-function sortTracks(list: Track[], sort: SortOption): Track[] {
+function sortTracks(list: LibraryTrack[], sort: SortOption): LibraryTrack[] {
   const sorted = [...list];
   switch (sort) {
     case "title":
@@ -36,7 +36,7 @@ function sortTracks(list: Track[], sort: SortOption): Track[] {
     default:
       return sorted.sort(
         (a, b) =>
-          new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime(),
+          new Date(b.addedAt).getTime() - new Date(a.addedAt).getTime(),
       );
   }
 }
@@ -54,12 +54,27 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   fetchTracks: async (userId) => {
     set({ isLoading: true, error: null });
     try {
-      const rows = await db
-        .select()
-        .from(tracks)
-        .where(eq(tracks.userId, userId))
-        .orderBy(desc(tracks.importedAt));
-      set({ tracks: rows as Track[], isLoading: false });
+      const rows = await getDb()
+        .select({
+          id: tracks.id,
+          youtubeId: tracks.youtubeId,
+          title: tracks.title,
+          artist: tracks.artist,
+          duration: tracks.duration,
+          fileKey: tracks.fileKey,
+          fileSize: tracks.fileSize,
+          format: tracks.format,
+          sourceUrl: tracks.sourceUrl,
+          downloadedAt: tracks.downloadedAt,
+          userTrackId: userTracks.id,
+          addedAt: userTracks.addedAt,
+          originalBpm: userTracks.originalBpm,
+        })
+        .from(userTracks)
+        .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
+        .where(eq(userTracks.userId, userId))
+        .orderBy(desc(userTracks.addedAt));
+      set({ tracks: rows as LibraryTrack[], isLoading: false });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Failed to load tracks",
@@ -75,14 +90,23 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
 
   updateTrack: async (trackId, data) => {
     try {
-      await db
+      await getDb()
         .update(tracks)
         .set({
           title: data.title,
           artist: data.artist,
-          originalBpm: data.originalBpm,
         })
         .where(eq(tracks.id, trackId));
+
+      if (data.originalBpm !== undefined) {
+        const ut = get().tracks.find((t) => t.id === trackId);
+        if (ut) {
+          await getDb()
+            .update(userTracks)
+            .set({ originalBpm: data.originalBpm })
+            .where(eq(userTracks.id, ut.userTrackId));
+        }
+      }
 
       set({
         tracks: sortTracks(
