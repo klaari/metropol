@@ -90,9 +90,6 @@ export default function PlaylistsScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Playlists</Text>
-        <Pressable onPress={() => setShowCreate(true)}>
-          <Text style={styles.newButton}>+ New</Text>
-        </Pressable>
       </View>
 
       {showCreate ? (
@@ -122,7 +119,7 @@ export default function PlaylistsScreen() {
       ) : playlists.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyText}>No playlists yet</Text>
-          <Text style={styles.emptySubtext}>Tap + New to create one</Text>
+          <Text style={styles.emptySubtext}>Tap + to create one</Text>
         </View>
       ) : (
         <FlatList
@@ -142,6 +139,10 @@ export default function PlaylistsScreen() {
           )}
         />
       )}
+
+      <Pressable style={styles.fab} onPress={() => setShowCreate(true)}>
+        <Text style={styles.fabText}>+</Text>
+      </Pressable>
     </View>
   );
 }
@@ -164,10 +165,27 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: "700",
   },
-  newButton: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
+  fab: {
+    position: "absolute",
+    bottom: 32,
+    right: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#fff",
+    justifyContent: "center",
+    alignItems: "center",
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  fabText: {
+    fontSize: 28,
+    fontWeight: "400",
+    color: "#000",
+    marginTop: -2,
   },
   createRow: {
     flexDirection: "row",
