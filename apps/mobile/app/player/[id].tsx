@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { getDb } from "../lib/db";
+import { getDb } from "../../lib/db";
 import { isNativeModuleAvailable, getTrackPlayer } from "../../lib/trackPlayer";
 import { usePlayerStore } from "../../store/player";
 
@@ -54,7 +54,7 @@ export default function PlayerScreen() {
     return () => clearInterval(interval);
   }, []);
 
-  const { currentTrack, playbackRate, loadTrack, setRate, savePosition } =
+  const { currentTrack, playbackRate, loadTrack, setRate, savePosition, debugInfo } =
     usePlayerStore();
 
   const [loading, setLoading] = useState(true);
@@ -102,14 +102,24 @@ export default function PlayerScreen() {
     if (tp) await tp.seekTo(value);
   }
 
+  const [playDebug, setPlayDebug] = useState("");
+
   async function togglePlayPause() {
     const tp = getTrackPlayer();
-    if (!tp) return;
-    if (playing) {
-      await tp.pause();
-      if (userId) savePosition(userId);
-    } else {
-      await tp.play();
+    if (!tp) { setPlayDebug("no tp instance"); return; }
+    try {
+      if (playing) {
+        await tp.pause();
+        if (userId) savePosition(userId);
+        setPlayDebug("paused");
+      } else {
+        setPlayDebug("calling play...");
+        await tp.play();
+        const st = await tp.getPlaybackState();
+        setPlayDebug(`play() done, state=${JSON.stringify(st)}`);
+      }
+    } catch (e: any) {
+      setPlayDebug(`ERROR: ${e?.message ?? e}`);
     }
   }
 
@@ -125,7 +135,7 @@ export default function PlayerScreen() {
     const parsed = bpmInput.trim() ? parseFloat(bpmInput.trim()) : null;
     if (parsed != null && (isNaN(parsed) || parsed <= 0)) return;
 
-    await db
+    await getDb()
       .update(tracks)
       .set({ originalBpm: parsed })
       .where(eq(tracks.id, currentTrack.id));
@@ -255,6 +265,18 @@ export default function PlayerScreen() {
             <Text style={styles.rateBtnText}>+0.5%</Text>
           </Pressable>
         </View>
+      </View>
+
+      {/* Debug overlay */}
+      <View style={{ backgroundColor: "#1a0a00", borderRadius: 8, padding: 10, marginBottom: 16 }}>
+        <Text style={{ color: "#f80", fontSize: 11, fontFamily: "monospace" }}>
+          {debugInfo || "(no load debug)"}
+        </Text>
+        {playDebug ? (
+          <Text style={{ color: "#0f0", fontSize: 11, fontFamily: "monospace", marginTop: 4 }}>
+            play: {playDebug}
+          </Text>
+        ) : null}
       </View>
 
       {/* BPM Display */}
