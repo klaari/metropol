@@ -135,7 +135,7 @@ export default function TrackList({ sort = "date" }: { sort?: SortOption }) {
   }, [getToken]);
 
   const sorted = sortTracks(tracks, sort);
-  const sections = sort === "date" ? groupByDate(sorted) : [{ title: "", items: sorted }];
+  const sections = [{ title: "", items: sorted }];
   const trackCount = tracks.length;
 
   if (loading) return <p className="text-zinc-500 text-sm py-12 text-center">Loading…</p>;
