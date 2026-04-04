@@ -96,7 +96,7 @@ function TrackRow({
       <button
         onClick={handlePlay}
         disabled={loading}
-        className="w-full flex items-center gap-3.5 px-4 py-3 hover:bg-white/5 active:bg-white/10 transition-colors text-left group"
+        className="w-full flex items-center gap-3 px-2 py-2.5 hover:bg-white/5 active:bg-white/10 transition-colors text-left group"
       >
         {/* Artwork placeholder */}
         <div className="w-12 h-12 rounded-lg bg-zinc-900 flex items-center justify-center shrink-0">
@@ -206,7 +206,7 @@ export default function TrackList() {
           {sections.map(({ title, items }) => (
             <div key={title || "all"}>
               {title && (
-                <p className="text-zinc-600 text-xs font-semibold uppercase tracking-widest px-4 mb-1">
+                <p className="text-zinc-600 text-xs font-semibold uppercase tracking-widest px-2 mb-1">
                   {title}
                 </p>
               )}
