@@ -15,6 +15,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    href: "/playlists",
+    label: "Playlists",
+    icon: (active: boolean) => (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2.25 : 1.75} className="w-6 h-6">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h10M4 18h10" />
+      </svg>
+    ),
+  },
+  {
     href: "/downloads",
     label: "Downloads",
     icon: (active: boolean) => (
