@@ -1,17 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAuth, useClerk } from "@clerk/nextjs";
+import { useAuth, useClerk, useUser } from "@clerk/nextjs";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
 export default function SettingsPage() {
   const { getToken } = useAuth();
   const { signOut } = useClerk();
-  const [loaded, setLoaded] = useState<boolean | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
-  const [isError, setIsError] = useState(false);
+  const { user } = useUser();
+  const [cookieStatus, setCookieStatus] = useState<boolean | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [isError, setIsError] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -22,15 +23,15 @@ export default function SettingsPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data: { loaded: boolean } = await r.json();
-        setLoaded(data.loaded);
+        setCookieStatus(data.loaded);
       } catch {
-        setLoaded(false);
+        setCookieStatus(false);
       }
     })();
   }, [getToken]);
 
   async function uploadFile(file: File) {
-    setStatus(null);
+    setStatusMessage(null);
     setIsError(false);
     setUploading(true);
 
@@ -47,79 +48,95 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) {
         setIsError(true);
-        setStatus((data as { error: string }).error ?? "Upload failed");
+        setStatusMessage((data as { error: string }).error ?? "Upload failed");
       } else {
-        setLoaded(true);
-        setStatus("Cookies uploaded successfully");
+        setCookieStatus(true);
+        setStatusMessage("Cookies uploaded successfully");
       }
     } catch {
       setIsError(true);
-      setStatus("Network error — upload failed");
+      setStatusMessage("Network error — upload failed");
     } finally {
       setUploading(false);
     }
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) uploadFile(file);
-  }
-
   return (
-    <div className="px-4 py-6 space-y-8 max-w-lg">
+    <div className="px-4 py-6 space-y-6 max-w-lg">
       <h1 className="text-3xl font-bold text-white">Settings</h1>
 
-      {/* YouTube Cookies */}
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold text-white">YouTube Cookies</h2>
-        <p className="text-zinc-500 text-sm leading-relaxed">
-          Upload a <code className="text-zinc-300">cookies.txt</code> file from your browser to authenticate YouTube downloads.
-          Use a browser extension like "Get cookies.txt LOCALLY" to export your YouTube cookies.
-        </p>
+      {/* Account */}
+      {user && (
+        <section>
+          <p className="text-xs font-semibold text-zinc-600 uppercase tracking-widest mb-2 px-1">Account</p>
+          <div className="rounded-2xl bg-zinc-950 divide-y divide-zinc-900 overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3.5">
+              {user.imageUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={user.imageUrl} alt="" className="w-9 h-9 rounded-full" />
+              )}
+              <div className="min-w-0">
+                <p className="text-white text-sm font-medium truncate">{user.fullName ?? user.username}</p>
+                <p className="text-zinc-500 text-xs truncate">{user.primaryEmailAddress?.emailAddress}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => signOut()}
+              className="w-full text-left px-4 py-3.5 text-red-500 text-sm font-medium hover:bg-zinc-900 transition-colors"
+            >
+              Sign out
+            </button>
+          </div>
+        </section>
+      )}
 
-        {/* Status */}
-        <div className="flex items-center gap-2">
-          <span className="text-zinc-500 text-sm">Status:</span>
-          {loaded === null ? (
-            <span className="text-zinc-500 text-sm italic">Checking…</span>
-          ) : loaded ? (
-            <span className="text-green-400 text-sm font-semibold">Cookies loaded ✓</span>
-          ) : (
-            <span className="text-[#f5a623] text-sm font-semibold">No cookies — downloads may fail</span>
-          )}
+      {/* YouTube */}
+      <section>
+        <p className="text-xs font-semibold text-zinc-600 uppercase tracking-widest mb-2 px-1">YouTube</p>
+        <div className="rounded-2xl bg-zinc-950 divide-y divide-zinc-900 overflow-hidden">
+
+          {/* Status row */}
+          <div className="flex items-center justify-between px-4 py-3.5">
+            <span className="text-white text-sm">Cookie status</span>
+            {cookieStatus === null ? (
+              <span className="text-zinc-600 text-sm">Checking…</span>
+            ) : cookieStatus ? (
+              <span className="text-green-400 text-sm font-medium">Active ✓</span>
+            ) : (
+              <span className="text-[#f5a623] text-sm font-medium">Not loaded</span>
+            )}
+          </div>
+
+          {/* Upload row */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-900 transition-colors disabled:opacity-50"
+          >
+            <span className="text-white text-sm">
+              {uploading ? "Uploading…" : "Upload cookies.txt"}
+            </span>
+            <span className="text-zinc-600 text-sm">›</span>
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".txt,text/plain"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); }}
+          />
         </div>
 
-        {/* Upload button */}
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="w-full bg-white text-black text-base font-semibold py-3.5 rounded-xl disabled:opacity-60 hover:bg-zinc-100 transition-colors"
-        >
-          {uploading ? "Uploading…" : "Upload cookies.txt"}
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".txt,text/plain"
-          className="hidden"
-          onChange={handleFileChange}
-        />
-
-        {status && (
-          <p className={`text-sm text-center ${isError ? "text-red-400" : "text-green-400"}`}>
-            {status}
+        {statusMessage && (
+          <p className={`text-xs mt-2 px-1 ${isError ? "text-red-400" : "text-green-400"}`}>
+            {statusMessage}
           </p>
         )}
-      </section>
 
-      {/* Sign Out */}
-      <section>
-        <button
-          onClick={() => signOut()}
-          className="w-full border border-zinc-800 text-red-500 text-base font-semibold py-3.5 rounded-xl hover:border-zinc-700 transition-colors"
-        >
-          Sign Out
-        </button>
+        <p className="text-xs text-zinc-700 mt-2 px-1 leading-relaxed">
+          Needed to download YouTube content. Export from your browser using "Get cookies.txt LOCALLY" (Chrome) or Cookie Quick Manager (Firefox). Use an incognito window for longer-lasting cookies.
+        </p>
       </section>
     </div>
   );
