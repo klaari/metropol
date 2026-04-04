@@ -49,176 +49,120 @@ function groupByDate(tracks: LibraryTrack[]): { title: string; items: LibraryTra
     else if (added >= weekAgo) label = "This Week";
     else label = "Earlier";
 
-    if (!groups[label]) {
-      groups[label] = [];
-      order.push(label);
-    }
+    if (!groups[label]) { groups[label] = []; order.push(label); }
     groups[label]!.push(track);
   }
 
   return order.map((title) => ({ title, items: groups[title]! }));
 }
 
-function TrackRow({
-  track,
-  getToken,
-}: {
-  track: LibraryTrack;
-  getToken: () => Promise<string | null>;
-}) {
+function TrackRow({ track, getToken }: { track: LibraryTrack; getToken: () => Promise<string | null> }) {
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const handlePlay = async () => {
-    if (streamUrl) {
-      audioRef.current?.play();
-      return;
-    }
+    if (streamUrl) { audioRef.current?.play(); return; }
     setLoading(true);
     try {
       const token = await getToken();
       const res = await fetch(`${API_URL}/tracks/${track.id}/stream`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) throw new Error("Could not get stream URL");
+      if (!res.ok) throw new Error();
       const { url } = (await res.json()) as { url: string };
       setStreamUrl(url);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
+    } catch { /* ignore */ } finally { setLoading(false); }
   };
+
+  const subtitle = [
+    track.artist ?? null,
+    track.originalBpm != null ? `${track.originalBpm} BPM` : null,
+  ].filter(Boolean).join("  ·  ");
 
   return (
     <li>
       <button
         onClick={handlePlay}
         disabled={loading}
-        className="w-full flex items-center gap-3 px-2 py-2.5 hover:bg-white/5 active:bg-white/10 transition-colors text-left group"
+        className="w-full flex items-center gap-3 py-2.5 hover:bg-white/5 active:bg-white/10 transition-colors text-left group rounded-xl"
       >
-        {/* Artwork placeholder */}
-        <div className="w-12 h-12 rounded-lg bg-zinc-900 flex items-center justify-center shrink-0">
-          <span className="text-xl text-zinc-600">♫</span>
+        {/* Artwork */}
+        <div className="w-11 h-11 rounded-lg bg-zinc-900 flex items-center justify-center shrink-0">
+          <span className="text-lg text-zinc-600">♫</span>
         </div>
 
-        {/* Info */}
+        {/* Title + subtitle */}
         <div className="flex-1 min-w-0">
-          <p className="text-white text-base font-semibold truncate">{track.title}</p>
-          <p className="text-zinc-500 text-sm truncate mt-0.5">
-            {track.artist ?? "Unknown artist"}
-            {track.originalBpm != null ? `  ·  ${track.originalBpm} BPM` : ""}
-          </p>
+          <p className="text-white text-sm font-medium leading-snug truncate">{track.title}</p>
+          {subtitle && (
+            <p className="text-zinc-500 text-xs leading-snug truncate mt-0.5">{subtitle}</p>
+          )}
         </div>
 
-        {/* Duration + play */}
-        <div className="flex items-center gap-3 shrink-0">
-          <span className="text-zinc-600 text-xs tabular-nums">{formatDuration(track.duration)}</span>
-          <span className="text-zinc-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity">
-            {loading ? "…" : "▶"}
-          </span>
-        </div>
+        {/* Duration */}
+        <span className="text-zinc-600 text-xs tabular-nums shrink-0">
+          {loading ? "…" : formatDuration(track.duration)}
+        </span>
       </button>
 
       {streamUrl && (
-        <div className="px-4 pb-2">
-          <audio
-            ref={audioRef}
-            src={streamUrl}
-            controls
-            autoPlay
-            className="w-full h-8 accent-white"
-          />
+        <div className="pb-1">
+          <audio ref={audioRef} src={streamUrl} controls autoPlay className="w-full h-8 accent-white" />
         </div>
       )}
     </li>
   );
 }
 
-export default function TrackList() {
+export default function TrackList({ sort = "date" }: { sort?: SortOption }) {
   const { getToken } = useAuth();
   const [tracks, setTracks] = useState<LibraryTrack[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [sort, setSort] = useState<SortOption>("date");
 
   useEffect(() => {
-    const loadTracks = async () => {
+    (async () => {
       try {
         const token = await getToken();
-        const res = await fetch(`${API_URL}/tracks`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch(`${API_URL}/tracks`, { headers: { Authorization: `Bearer ${token}` } });
         if (!res.ok) throw new Error("Failed to load tracks");
-        const data = (await res.json()) as LibraryTrack[];
-        setTracks(data);
+        setTracks(await res.json() as LibraryTrack[]);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load tracks.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadTracks();
+      } finally { setLoading(false); }
+    })();
   }, [getToken]);
 
   const sorted = sortTracks(tracks, sort);
   const sections = sort === "date" ? groupByDate(sorted) : [{ title: "", items: sorted }];
   const trackCount = tracks.length;
 
-  if (loading) return <p className="text-zinc-500 text-sm py-8 text-center">Loading…</p>;
-  if (error) return <p className="text-red-400 text-sm">{error}</p>;
+  if (loading) return <p className="text-zinc-500 text-sm py-12 text-center">Loading…</p>;
+  if (error) return <p className="text-red-400 text-sm px-4">{error}</p>;
+  if (trackCount === 0) return (
+    <div className="flex flex-col items-center justify-center py-20 gap-2 text-center">
+      <p className="text-white text-lg font-medium">No tracks yet</p>
+      <p className="text-zinc-600 text-sm">Go to Downloads to add music</p>
+    </div>
+  );
 
   return (
-    <div>
-      {/* Header row */}
-      <div className="flex items-end justify-between mb-4">
-        <div>
-          {trackCount > 0 && (
-            <p className="text-zinc-600 text-sm mt-1">
-              {trackCount === 1 ? "1 track" : `${trackCount} tracks`}
+    <div className="space-y-5">
+      {sections.map(({ title, items }) => (
+        <div key={title || "all"}>
+          {title && (
+            <p className="text-zinc-600 text-xs font-semibold uppercase tracking-widest mb-1">
+              {title}
             </p>
           )}
+          <ul className="divide-y divide-zinc-900/60">
+            {items.map((track) => (
+              <TrackRow key={track.id} track={track} getToken={getToken} />
+            ))}
+          </ul>
         </div>
-        {trackCount > 0 && (
-          <div className="relative">
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortOption)}
-              className="appearance-none bg-zinc-900 text-zinc-400 text-sm font-medium px-3 py-1.5 pr-7 rounded-full border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-zinc-600"
-            >
-              {(Object.keys(SORT_LABELS) as SortOption[]).map((s) => (
-                <option key={s} value={s}>{SORT_LABELS[s]}</option>
-              ))}
-            </select>
-            <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-500 text-xs">▾</span>
-          </div>
-        )}
-      </div>
-
-      {trackCount === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-2">
-          <p className="text-white text-lg font-medium">No tracks yet</p>
-          <p className="text-zinc-600 text-sm">Go to Downloads to add music</p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {sections.map(({ title, items }) => (
-            <div key={title || "all"}>
-              {title && (
-                <p className="text-zinc-600 text-xs font-semibold uppercase tracking-widest px-2 mb-1">
-                  {title}
-                </p>
-              )}
-              <ul className="divide-y divide-zinc-900">
-                {items.map((track) => (
-                  <TrackRow key={track.id} track={track} getToken={getToken} />
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-      )}
+      ))}
     </div>
   );
 }
