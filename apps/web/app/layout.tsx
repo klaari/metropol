@@ -18,7 +18,7 @@ export default function RootLayout({
       <html lang="en">
         <body className="min-h-screen bg-black text-white">
           <Nav />
-          <main className="max-w-3xl mx-auto">{children}</main>
+          <main className="max-w-3xl mx-auto pb-20 sm:pb-0">{children}</main>
         </body>
       </html>
     </ClerkProvider>

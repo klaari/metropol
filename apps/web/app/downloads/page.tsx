@@ -61,7 +61,7 @@ export default function DownloadsPage() {
   };
 
   return (
-    <div className="px-4 py-6 pb-24">
+    <div className="px-4 py-6">
       <h1 className="text-3xl font-bold text-white mb-6">Downloads</h1>
 
       {/* Job list — always mounted so it fetches on load */}
