@@ -61,42 +61,35 @@ export default function DownloadsPage() {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-57px)]">
-      {/* Content area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
-        <h1 className="text-3xl font-bold text-white mb-6">Downloads</h1>
+    <div className="px-4 py-6 pb-24">
+      <h1 className="text-3xl font-bold text-white mb-6">Downloads</h1>
 
-        {jobs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-2 text-center">
-            <span className="text-5xl mb-2">☁</span>
-            <p className="text-zinc-600 text-base">No downloads yet</p>
-          </div>
-        ) : (
-          <DownloadList jobs={jobs} setJobs={setJobs} />
-        )}
-      </div>
+      {/* Job list — always mounted so it fetches on load */}
+      <DownloadList jobs={jobs} setJobs={setJobs} />
 
-      {/* Input bar pinned to bottom */}
-      <div className="border-t border-zinc-900 px-3 py-2.5">
-        <form onSubmit={handleSubmit} className="flex items-center gap-2">
-          <input
-            ref={inputRef}
-            type="url"
-            value={url}
-            onChange={(e) => { setUrl(e.target.value); setError(null); }}
-            placeholder="Paste YouTube URL..."
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-full px-4 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600 text-sm"
-            disabled={submitting}
-          />
-          <button
-            type="submit"
-            disabled={submitting || !url.trim()}
-            className="w-10 h-10 rounded-full bg-white flex items-center justify-center disabled:opacity-20 hover:bg-zinc-100 transition-colors shrink-0"
-          >
-            <span className="text-black text-base leading-none">{submitting ? "…" : "↑"}</span>
-          </button>
-        </form>
-        {error && <p className="text-red-400 text-xs mt-1.5 px-1">{error}</p>}
+      {/* Input bar — sticky to bottom of viewport */}
+      <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-zinc-900 px-3 py-2.5">
+        <div className="max-w-3xl mx-auto">
+          <form onSubmit={handleSubmit} className="flex items-center gap-2">
+            <input
+              ref={inputRef}
+              type="url"
+              value={url}
+              onChange={(e) => { setUrl(e.target.value); setError(null); }}
+              placeholder="Paste YouTube URL..."
+              className="flex-1 bg-zinc-900 border border-zinc-800 rounded-full px-4 py-2.5 text-white placeholder-zinc-600 focus:outline-none focus:border-zinc-600 text-sm"
+              disabled={submitting}
+            />
+            <button
+              type="submit"
+              disabled={submitting || !url.trim()}
+              className="w-10 h-10 rounded-full bg-white flex items-center justify-center disabled:opacity-20 hover:bg-zinc-100 transition-colors shrink-0"
+            >
+              <span className="text-black text-base leading-none">{submitting ? "…" : "↑"}</span>
+            </button>
+          </form>
+          {error && <p className="text-red-400 text-xs mt-1.5 px-1">{error}</p>}
+        </div>
       </div>
     </div>
   );
