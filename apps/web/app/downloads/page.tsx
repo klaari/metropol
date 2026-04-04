@@ -68,7 +68,7 @@ export default function DownloadsPage() {
       <DownloadList jobs={jobs} setJobs={setJobs} />
 
       {/* Input bar — sticky to bottom of viewport */}
-      <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-zinc-900 px-3 py-2.5">
+      <div className="fixed bottom-0 left-0 right-0 bg-black border-t border-zinc-900 px-3 py-2.5" style={{ paddingBottom: "calc(0.625rem + env(safe-area-inset-bottom))" }}>
         <div className="max-w-3xl mx-auto">
           <form onSubmit={handleSubmit} className="flex items-center gap-2">
             <input
