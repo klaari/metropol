@@ -1,46 +1,63 @@
 import React from "react";
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, Pressable, StyleSheet } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { DownloadJob, DownloadJobStatus } from "@metropol/types";
 
-const STATUS_LABELS: Record<DownloadJobStatus, string> = {
-  queued: "Queued",
-  downloading: "Downloading...",
-  uploading: "Uploading...",
-  completed: "Done",
-  failed: "Failed",
+const STATUS_ICONS: Record<DownloadJobStatus, { name: string; color: string }> = {
+  queued: { name: "time-outline", color: "#666" },
+  downloading: { name: "arrow-down-circle-outline", color: "#4a9eff" },
+  uploading: { name: "cloud-upload-outline", color: "#f5a623" },
+  completed: { name: "checkmark", color: "#555" },
+  failed: { name: "close-circle", color: "#ff3b30" },
 };
 
-const STATUS_COLORS: Record<DownloadJobStatus, string> = {
-  queued: "#888",
-  downloading: "#4a9eff",
-  uploading: "#f5a623",
-  completed: "#4cd964",
-  failed: "#ff3b30",
-};
+interface Props {
+  job: DownloadJob;
+  onRetry?: () => void;
+  onDismiss?: () => void;
+}
 
-export function DownloadJobItem({ job }: { job: DownloadJob }) {
-  const statusColor = STATUS_COLORS[job.status] ?? "#888";
+export function DownloadJobItem({ job, onRetry, onDismiss }: Props) {
+  const icon = STATUS_ICONS[job.status] ?? STATUS_ICONS.queued;
+  const isFailed = job.status === "failed";
+
+  const isActive = job.status === "downloading" || job.status === "uploading" || job.status === "queued";
 
   return (
     <View style={styles.container}>
+      {isActive && (
+        <Ionicons
+          name={icon.name as any}
+          size={16}
+          color={icon.color}
+          style={styles.icon}
+        />
+      )}
       <View style={styles.info}>
         <Text style={styles.title} numberOfLines={1}>
           {job.title || job.url}
         </Text>
-        {job.artist && (
+        {job.artist ? (
           <Text style={styles.artist} numberOfLines={1}>
             {job.artist}
           </Text>
-        )}
-        {job.error && (
+        ) : null}
+        {job.error ? (
           <Text style={styles.error} numberOfLines={2}>
             {job.error}
           </Text>
-        )}
+        ) : null}
       </View>
-      <View style={[styles.badge, { backgroundColor: statusColor }]}>
-        <Text style={styles.badgeText}>{STATUS_LABELS[job.status]}</Text>
-      </View>
+      {isFailed && onRetry && (
+        <Pressable style={styles.actionBtn} onPress={onRetry} hitSlop={8}>
+          <Ionicons name="refresh" size={16} color="#4a9eff" />
+        </Pressable>
+      )}
+      {isFailed && onDismiss && (
+        <Pressable style={styles.actionBtn} onPress={onDismiss} hitSlop={8}>
+          <Ionicons name="close" size={16} color="#666" />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -50,37 +67,31 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#333",
+    paddingVertical: 8,
+  },
+  icon: {
+    marginRight: 10,
+    width: 18,
   },
   info: {
     flex: 1,
-    marginRight: 12,
+    marginRight: 8,
   },
   title: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
+    color: "#ccc",
+    fontSize: 14,
   },
   artist: {
-    color: "#aaa",
-    fontSize: 13,
-    marginTop: 2,
+    color: "#666",
+    fontSize: 12,
+    marginTop: 1,
   },
   error: {
     color: "#ff6b6b",
-    fontSize: 12,
-    marginTop: 4,
+    fontSize: 11,
+    marginTop: 2,
   },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  badgeText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "600",
+  actionBtn: {
+    padding: 6,
   },
 });

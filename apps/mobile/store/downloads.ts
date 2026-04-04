@@ -9,6 +9,8 @@ interface DownloadsState {
 
   fetchJobs: (token: string) => Promise<void>;
   submitDownload: (url: string, token: string) => Promise<{ error: string | null }>;
+  dismissJob: (jobId: string, token: string) => Promise<{ error: string | null }>;
+  retryJob: (job: DownloadJob, token: string) => Promise<{ error: string | null }>;
   handleWsMessage: (msg: WsJobStatusMessage) => void;
 }
 
@@ -41,6 +43,23 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
       set({ jobs: [data, ...get().jobs] });
     }
     return { error: null };
+  },
+
+  dismissJob: async (jobId, token) => {
+    const { data, error } = await apiFetch<{ ok: boolean }>(
+      `/downloads/${jobId}`,
+      token,
+      { method: "DELETE" },
+    );
+    if (error) return { error };
+    set({ jobs: get().jobs.filter((j) => j.id !== jobId) });
+    return { error: null };
+  },
+
+  retryJob: async (job, token) => {
+    // Dismiss the failed job first, then resubmit
+    await get().dismissJob(job.id, token);
+    return get().submitDownload(job.url, token);
   },
 
   handleWsMessage: (msg) => {

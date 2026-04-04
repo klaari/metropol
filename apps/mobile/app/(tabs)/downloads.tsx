@@ -1,39 +1,84 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   TextInput,
-  TouchableOpacity,
+  Pressable,
   FlatList,
   StyleSheet,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
+  SafeAreaView,
 } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
+import { useRouter } from "expo-router";
 import type { DownloadJob } from "@metropol/types";
 import { useDownloadsStore } from "../../store/downloads";
 import { DownloadJobItem } from "../../components/DownloadJobItem";
+import { useDownloadWs } from "../../hooks/useDownloadWs";
+
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const MAX_RECENT_JOBS = 10;
 
 export default function DownloadsScreen() {
   const { getToken } = useAuth();
-  const { jobs, isLoading, fetchJobs, submitDownload } = useDownloadsStore();
+  const router = useRouter();
+  const { jobs, isLoading, fetchJobs, submitDownload, dismissJob, retryJob } =
+    useDownloadsStore();
   const [url, setUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  useDownloadWs();
+
+  const tokenRef = useRef<string | null>(null);
+
+  async function ensureToken(): Promise<string | null> {
+    if (!tokenRef.current) {
+      tokenRef.current = await getToken();
+    }
+    return tokenRef.current;
+  }
+
   useEffect(() => {
+    if (!API_URL) return;
+    let mounted = true;
     (async () => {
-      const token = await getToken();
-      if (token) fetchJobs(token);
+      const token = await ensureToken();
+      if (token && mounted) fetchJobs(token);
     })();
-  }, [getToken, fetchJobs]);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const hasActiveJobs = jobs.some(
+    (j) =>
+      j.status === "queued" ||
+      j.status === "downloading" ||
+      j.status === "uploading",
+  );
+
+  useEffect(() => {
+    if (!hasActiveJobs || !API_URL) return;
+    const id = setInterval(async () => {
+      const token = await ensureToken();
+      if (token) fetchJobs(token);
+    }, 5000);
+    return () => clearInterval(id);
+  }, [hasActiveJobs]);
+
+  const sessionExpired = jobs.some((j) =>
+    j.error?.includes("YouTube session expired"),
+  );
+
+  const recentJobs = jobs.slice(0, MAX_RECENT_JOBS);
 
   const handleSubmit = async () => {
     const trimmed = url.trim();
     if (!trimmed) return;
 
     setSubmitting(true);
-    const token = await getToken();
+    const token = await ensureToken();
     if (!token) {
       Alert.alert("Error", "Not authenticated");
       setSubmitting(false);
@@ -50,20 +95,65 @@ export default function DownloadsScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: DownloadJob }) => (
-    <DownloadJobItem job={item} />
-  );
+  const handleRetry = async (job: DownloadJob) => {
+    const token = await ensureToken();
+    if (!token) return;
+    const { error } = await retryJob(job, token);
+    if (error) Alert.alert("Retry Failed", error);
+  };
+
+  const handleDismiss = async (job: DownloadJob) => {
+    const token = await ensureToken();
+    if (!token) return;
+    const { error } = await dismissJob(job.id, token);
+    if (error) Alert.alert("Error", error);
+  };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <View style={styles.inputRow}>
+    <SafeAreaView style={styles.container}>
+      <Text style={styles.heading}>Downloads</Text>
+
+      {sessionExpired && (
+        <Pressable
+          style={styles.expiredBanner}
+          onPress={() => router.push("/(tabs)/settings")}
+        >
+          <Ionicons name="warning" size={16} color="#f5a623" />
+          <Text style={styles.expiredText}>
+            YouTube cookies expired — tap to update in Settings
+          </Text>
+        </Pressable>
+      )}
+
+      {/* Recent downloads */}
+      {recentJobs.length > 0 ? (
+        <View style={styles.recentSection}>
+          <Text style={styles.recentLabel}>Recent</Text>
+          <FlatList
+            data={recentJobs}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <DownloadJobItem
+                job={item}
+                onRetry={() => handleRetry(item)}
+                onDismiss={() => handleDismiss(item)}
+              />
+            )}
+          />
+        </View>
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="cloud-download-outline" size={40} color="#333" />
+          <Text style={styles.emptyText}>No downloads yet</Text>
+        </View>
+      )}
+
+      {/* Input pinned to bottom */}
+      <View style={styles.inputBar}>
         <TextInput
           style={styles.input}
           placeholder="Paste YouTube URL..."
-          placeholderTextColor="#666"
+          placeholderTextColor="#555"
           value={url}
           onChangeText={setUrl}
           autoCapitalize="none"
@@ -72,29 +162,23 @@ export default function DownloadsScreen() {
           returnKeyType="go"
           onSubmitEditing={handleSubmit}
         />
-        <TouchableOpacity
-          style={[styles.button, submitting && styles.buttonDisabled]}
+        <Pressable
+          style={[
+            styles.submitButton,
+            (!url.trim() || submitting) && styles.submitButtonDisabled,
+          ]}
           onPress={handleSubmit}
           disabled={submitting || !url.trim()}
+          hitSlop={4}
         >
-          <Text style={styles.buttonText}>
-            {submitting ? "..." : "Download"}
-          </Text>
-        </TouchableOpacity>
+          <Ionicons
+            name={submitting ? "hourglass-outline" : "arrow-up"}
+            size={20}
+            color="#000"
+          />
+        </Pressable>
       </View>
-
-      <FlatList
-        data={jobs}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={jobs.length === 0 ? styles.empty : undefined}
-        ListEmptyComponent={
-          <Text style={styles.emptyText}>
-            {isLoading ? "Loading..." : "No downloads yet"}
-          </Text>
-        }
-      />
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -103,43 +187,83 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
-  inputRow: {
+  heading: {
+    color: "#fff",
+    fontSize: 28,
+    fontWeight: "700",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 12,
+  },
+  expiredBanner: {
     flexDirection: "row",
-    padding: 12,
+    alignItems: "center",
     gap: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#333",
+    backgroundColor: "#1a1200",
+    marginHorizontal: 16,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#3d2800",
+  },
+  expiredText: {
+    color: "#f5a623",
+    fontSize: 13,
+    flex: 1,
+  },
+  recentSection: {
+    flex: 1,
+  },
+  recentLabel: {
+    color: "#666",
+    fontSize: 13,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    paddingHorizontal: 16,
+    marginBottom: 4,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 8,
+  },
+  emptyText: {
+    color: "#444",
+    fontSize: 15,
+  },
+  inputBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#222",
   },
   input: {
     flex: 1,
     backgroundColor: "#1a1a1a",
     color: "#fff",
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    borderRadius: 20,
+    paddingHorizontal: 16,
     paddingVertical: 10,
     fontSize: 15,
+    borderWidth: 1,
+    borderColor: "#333",
   },
-  button: {
-    backgroundColor: "#4a9eff",
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    justifyContent: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.5,
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 15,
-  },
-  empty: {
-    flex: 1,
-    justifyContent: "center",
+  submitButton: {
+    backgroundColor: "#fff",
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     alignItems: "center",
+    justifyContent: "center",
   },
-  emptyText: {
-    color: "#666",
-    fontSize: 16,
+  submitButtonDisabled: {
+    opacity: 0.2,
   },
 });
