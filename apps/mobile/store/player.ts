@@ -122,7 +122,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         if (position > 0) {
           await tp.seekTo(position);
         }
-        dbg("load complete");
+
+        // Auto-play after load — required on RNTP 5.x alpha where buffering
+        // state never self-resolves without an explicit play() call
+        await tp.play();
+        dbg("load complete + play() called");
       } else {
         dbg(`SKIP: ready=${playerReady} tp=${!!tp}`);
       }
