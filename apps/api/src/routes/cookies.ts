@@ -89,10 +89,8 @@ export async function loadUserCookies(
   userId: string,
 ): Promise<string | null> {
   const path = localCookiesPath(userId);
-  const localFile = Bun.file(path);
 
-  if (await localFile.exists()) return path;
-
+  // Always fetch from R2 to pick up freshly uploaded cookies
   const r2Content = await downloadFromR2(R2_COOKIES_KEY(userId));
   if (!r2Content) return null;
 

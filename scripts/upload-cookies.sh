@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Load .env if present
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../.env"
+if [ -f "$ENV_FILE" ]; then
+  set -a
+  source "$ENV_FILE"
+  set +a
+fi
+
 # Upload YouTube cookies to Metropol API
 #
 # Usage:
@@ -20,7 +29,18 @@ TMPFILE="$(mktemp /tmp/yt-cookies-XXXXXX.txt)"
 trap 'rm -f "$TMPFILE"' EXIT
 
 echo "Extracting cookies from ${BROWSER}..."
-yt-dlp --cookies-from-browser "$BROWSER" --cookies "$TMPFILE" "https://youtube.com" 2>/dev/null
+python3 -c "
+from yt_dlp.cookies import extract_cookies_from_browser
+import http.cookiejar
+
+jar = extract_cookies_from_browser('${BROWSER}')
+out = http.cookiejar.MozillaCookieJar('${TMPFILE}')
+for c in jar:
+    out.set_cookie(c)
+out.save(ignore_discard=True, ignore_expires=True)
+yt_cookies = sum(1 for c in out if 'youtube' in c.domain or 'google' in c.domain)
+print(f'Saved {len(out)} cookies ({yt_cookies} YouTube/Google)')
+"
 
 echo "Uploading to ${METROPOL_API_URL}/cookies..."
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${METROPOL_API_URL}/cookies" -H "X-API-Key: ${METROPOL_API_KEY}" -H "X-User-Id: ${METROPOL_USER_ID}" -F "cookies=@${TMPFILE}")
