@@ -36,10 +36,10 @@ import http.cookiejar
 jar = extract_cookies_from_browser('${BROWSER}')
 out = http.cookiejar.MozillaCookieJar('${TMPFILE}')
 for c in jar:
-    out.set_cookie(c)
+    if 'youtube' in c.domain or 'google' in c.domain:
+        out.set_cookie(c)
 out.save(ignore_discard=True, ignore_expires=True)
-yt_cookies = sum(1 for c in out if 'youtube' in c.domain or 'google' in c.domain)
-print(f'Saved {len(out)} cookies ({yt_cookies} YouTube/Google)')
+print(f'Saved {len(out)} YouTube/Google cookies')
 "
 
 echo "Uploading to ${METROPOL_API_URL}/cookies..."
@@ -50,6 +50,11 @@ BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [ "$HTTP_CODE" = "200" ]; then
   echo "Done — cookies uploaded."
+  echo ""
+  echo "If downloads still fail with 'session expired':"
+  echo "  1. Make sure Railway deployed the latest code: railway deployment list"
+  echo "  2. If the latest deploy is SKIPPED, force it: railway redeploy --yes"
+  echo "  3. After deploy completes, re-run this script and retry the download"
 else
   echo "Failed (HTTP ${HTTP_CODE}): ${BODY}"
   exit 1
