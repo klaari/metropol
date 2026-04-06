@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import type { DownloadJob, DownloadJobStatus, WsJobStatusMessage } from "@metropol/types";
-import Link from "next/link";
+
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:3000";
@@ -155,22 +155,43 @@ export default function DownloadList({ jobs, setJobs }: Props) {
     } catch { /* silently fail */ }
   };
 
-  const sessionExpired = jobs.some((j) => j.error?.includes("YouTube session expired"));
+  const expiredJobs = jobs.filter((j) => j.error?.includes("YouTube session expired"));
+  const [retrying, setRetrying] = useState(false);
+
+  const handleRetryExpired = async () => {
+    setRetrying(true);
+    try {
+      const token = await getToken();
+      for (const job of expiredJobs) {
+        await fetch(`${API_URL}/downloads`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ url: job.url }),
+        });
+      }
+      await fetchJobs();
+    } catch { /* silently fail */ }
+    setRetrying(false);
+  };
 
   if (jobs.length === 0) return null;
 
   return (
     <div className="space-y-3">
-      {sessionExpired && (
-        <Link
-          href="/settings"
-          className="flex items-center gap-2.5 bg-[#1a1200] border border-[#3d2800] rounded-xl px-4 py-3 hover:border-[#5a3d00] transition-colors"
-        >
+      {expiredJobs.length > 0 && (
+        <div className="flex items-center gap-2.5 bg-[#1a1200] border border-[#3d2800] rounded-xl px-4 py-3">
           <span className="text-[#f5a623] text-sm">⚠</span>
           <p className="text-[#f5a623] text-sm flex-1">
-            YouTube cookies expired — tap to update in Settings
+            {expiredJobs.length} download{expiredJobs.length > 1 ? "s" : ""} failed — cookies were expired
           </p>
-        </Link>
+          <button
+            onClick={handleRetryExpired}
+            disabled={retrying}
+            className="text-[#f5a623] text-sm font-medium hover:text-[#ffbf47] transition-colors disabled:opacity-50 shrink-0"
+          >
+            {retrying ? "Retrying…" : "Retry all"}
+          </button>
+        </div>
       )}
 
       <div>
