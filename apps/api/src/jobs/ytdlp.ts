@@ -39,7 +39,7 @@ function stripPlaylistParams(url: string): string {
 
 export async function getMetadata(url: string, opts?: YtDlpOptions): Promise<VideoMetadata> {
   const cleanUrl = stripPlaylistParams(url.trim());
-  const args = ["yt-dlp", "--dump-json", "--no-download", "--no-playlist", ...jsRuntimeArgs(), "-v"];
+  const args = ["yt-dlp", "--dump-json", "--no-download", "--no-playlist", ...jsRuntimeArgs(), "-v", "--extractor-args", "youtube:player_client=ios,web"];
   if (opts?.cookiesPath) args.push("--cookies", opts.cookiesPath);
   args.push(cleanUrl);
 
@@ -85,6 +85,7 @@ export async function downloadAudio(url: string, opts?: YtDlpOptions): Promise<D
     ...jsRuntimeArgs(),
     "-v",
     "--no-playlist",
+    "--extractor-args", "youtube:player_client=ios,web",
     "-f", "bestaudio[ext=m4a]/bestaudio",
     "--extract-audio",
     "--audio-format", "m4a",
