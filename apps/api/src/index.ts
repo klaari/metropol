@@ -8,8 +8,12 @@ import { cookiesRoute } from "./routes/cookies";
 import { playlistsRoute } from "./routes/playlists";
 import { handleWsOpen, handleWsClose, handleWsMessage } from "./ws/handler";
 import { initProcessor, recoverStaleJobs } from "./jobs/processor";
+import { startBgutilServer } from "./lib/bgutil";
 
-// Initialize job processor before starting server
+// Spawn the bgutil PO Token provider before any yt-dlp invocation can happen.
+// yt-dlp's bgutil plugin auto-detects it on 127.0.0.1:4416.
+startBgutilServer();
+
 initProcessor();
 
 const app = new Hono();
