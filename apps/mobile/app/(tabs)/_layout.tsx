@@ -1,6 +1,9 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
+import { BottomTabBar } from "@react-navigation/bottom-tabs";
 import { Redirect, Tabs } from "expo-router";
+import { View } from "react-native";
+import MiniPlayer from "../../components/MiniPlayer";
 
 export default function TabsLayout() {
   const { isSignedIn } = useAuth();
@@ -11,6 +14,12 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => (
+        <View>
+          <MiniPlayer />
+          <BottomTabBar {...props} />
+        </View>
+      )}
       screenOptions={{
         headerShown: false,
         tabBarStyle: {

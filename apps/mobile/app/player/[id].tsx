@@ -1,5 +1,6 @@
 import { tracks } from "@metropol/db";
 import { useAuth } from "@clerk/clerk-expo";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { eq } from "drizzle-orm";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -28,34 +29,17 @@ export default function PlayerScreen() {
   const { userId } = useAuth();
   const router = useRouter();
 
-  // Polling-based replacements for useProgress / useIsPlaying
-  const [position, setPosition] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [playing, setPlaying] = useState(false);
-
-  useEffect(() => {
-    const tp = getTrackPlayer();
-    if (!tp) return;
-
-    const interval = setInterval(async () => {
-      try {
-        const progress = await tp.getProgress();
-        setPosition(progress.position);
-        setDuration(progress.duration);
-
-        const state = await tp.getPlaybackState();
-        // state.state is a string like "playing", "paused", etc.
-        setPlaying(state.state === "playing");
-      } catch {
-        // Player may not be ready yet
-      }
-    }, 200);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const { currentTrack, playbackRate, loadTrack, setRate, savePosition, debugInfo } =
-    usePlayerStore();
+  const {
+    currentTrack,
+    playbackRate,
+    loadTrack,
+    setRate,
+    savePosition,
+    debugInfo,
+    playing,
+    position,
+    duration,
+  } = usePlayerStore();
 
   const [loading, setLoading] = useState(true);
   const [editingBpm, setEditingBpm] = useState(false);
@@ -238,7 +222,7 @@ export default function PlayerScreen() {
           onPress={() => getTrackPlayer()?.skipToPrevious().catch(() => {})}
           hitSlop={12}
         >
-          <Text style={styles.transportBtn}>⏮</Text>
+          <Ionicons name="play-skip-back" size={36} color="#fff" />
         </Pressable>
 
         <Pressable
@@ -246,14 +230,14 @@ export default function PlayerScreen() {
           onPress={togglePlayPause}
           hitSlop={12}
         >
-          <Text style={styles.playBtnText}>{playing ? "⏸" : "▶"}</Text>
+          <Ionicons name={playing ? "pause" : "play"} size={44} color="#000" />
         </Pressable>
 
         <Pressable
           onPress={() => getTrackPlayer()?.skipToNext().catch(() => {})}
           hitSlop={12}
         >
-          <Text style={styles.transportBtn}>⏭</Text>
+          <Ionicons name="play-skip-forward" size={36} color="#fff" />
         </Pressable>
       </View>
 

@@ -11,12 +11,36 @@ interface PlayerState {
   playbackRate: number;
   currentPlaylistId: string | null;
   debugInfo: string;
+  playing: boolean;
+  position: number;
+  duration: number;
 
   loadTrack: (trackId: string, userId: string) => Promise<void>;
   setRate: (rate: number, userId: string) => Promise<void>;
   savePosition: (userId: string) => Promise<void>;
   setPlaylistContext: (playlistId: string | null) => void;
   reset: () => void;
+}
+
+let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+function startPolling() {
+  if (pollInterval) return;
+  pollInterval = setInterval(async () => {
+    const tp = getTrackPlayer();
+    if (!tp) return;
+    try {
+      const progress = await tp.getProgress();
+      const state = await tp.getPlaybackState();
+      usePlayerStore.setState({
+        position: progress.position,
+        duration: progress.duration,
+        playing: state.state === "playing",
+      });
+    } catch {
+      // Player not ready yet — try again next tick
+    }
+  }, 200);
 }
 
 /** Upsert a partial playback state row — only the provided fields are updated. */
@@ -46,8 +70,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playbackRate: 1.0,
   currentPlaylistId: null,
   debugInfo: "",
+  playing: false,
+  position: 0,
+  duration: 0,
 
   loadTrack: async (trackId, userId) => {
+    if (get().currentTrack?.id === trackId) {
+      console.log("[player.loadTrack]", `already loaded ${trackId} — keeping playback`);
+      return;
+    }
+
     const log: string[] = [];
     const dbg = (msg: string) => {
       console.log("[player.loadTrack]", msg);
@@ -60,6 +92,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       const playerReady = await setupPlayer();
       const tp = getTrackPlayer();
       dbg(`ready=${playerReady} tp=${!!tp}`);
+      if (playerReady) startPolling();
 
       // Fetch track from DB (join through userTracks for userId scoping)
       const [track] = await getDb()
