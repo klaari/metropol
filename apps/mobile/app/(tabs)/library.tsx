@@ -28,6 +28,7 @@ import TrackItem from "../../components/TrackItem";
 import { getDb } from "../../lib/db";
 import { buildFileKey, getUploadUrl } from "../../lib/r2";
 import { type SortOption, useLibraryStore } from "../../store/library";
+import { usePlayerStore } from "../../store/player";
 import { usePlaylistsStore } from "../../store/playlists";
 
 const AUDIO_TYPES = [
@@ -196,16 +197,28 @@ export default function LibraryScreen() {
   }
 
   function showTrackActions(track: Track) {
-    const options = ["Add to Playlist", "Edit Metadata", "Delete", "Cancel"];
-    const destructiveIndex = 2;
-    const cancelIndex = 3;
+    const options = [
+      "Play next",
+      "Add to queue",
+      "Add to Playlist",
+      "Edit Metadata",
+      "Delete",
+      "Cancel",
+    ];
+    const destructiveIndex = 4;
+    const cancelIndex = 5;
 
     function handleAction(index: number) {
+      if (!userId) return;
       if (index === 0) {
-        openPlaylistPicker(track);
+        usePlayerStore.getState().playNext(track.id, userId);
       } else if (index === 1) {
-        setEditingTrack(track);
+        usePlayerStore.getState().addToQueue(track.id, userId);
       } else if (index === 2) {
+        openPlaylistPicker(track);
+      } else if (index === 3) {
+        setEditingTrack(track);
+      } else if (index === 4) {
         Alert.alert("Delete Track", `Delete "${track.title}"?`, [
           { text: "Cancel", style: "cancel" },
           {
@@ -224,9 +237,11 @@ export default function LibraryScreen() {
       );
     } else {
       Alert.alert("Track Options", track.title, [
-        { text: "Add to Playlist", onPress: () => handleAction(0) },
-        { text: "Edit Metadata", onPress: () => handleAction(1) },
-        { text: "Delete", style: "destructive", onPress: () => handleAction(2) },
+        { text: "Play next", onPress: () => handleAction(0) },
+        { text: "Add to queue", onPress: () => handleAction(1) },
+        { text: "Add to Playlist", onPress: () => handleAction(2) },
+        { text: "Edit Metadata", onPress: () => handleAction(3) },
+        { text: "Delete", style: "destructive", onPress: () => handleAction(4) },
         { text: "Cancel", style: "cancel" },
       ]);
     }
@@ -324,7 +339,18 @@ export default function LibraryScreen() {
           renderItem={({ item }) => (
             <TrackItem
               track={item}
-              onPress={() => router.push(`/player/${item.id}`)}
+              onPress={() => {
+                if (!userId) return;
+                const idx = trackList.findIndex((t) => t.id === item.id);
+                usePlayerStore
+                  .getState()
+                  .playWithQueue(
+                    trackList.map((t) => t.id),
+                    Math.max(0, idx),
+                    userId,
+                  );
+                router.push(`/player/${item.id}`);
+              }}
               onLongPress={() => showTrackActions(item)}
             />
           )}

@@ -52,6 +52,16 @@ export default function PlaylistDetailScreen() {
 
   function handleTrackPress(trackId: string) {
     if (id) setPlaylistContext(id);
+    if (userId) {
+      const idx = tracks.findIndex((t) => t.id === trackId);
+      usePlayerStore
+        .getState()
+        .playWithQueue(
+          tracks.map((t) => t.id),
+          Math.max(0, idx),
+          userId,
+        );
+    }
     router.push(`/player/${trackId}`);
   }
 
@@ -163,6 +173,20 @@ export default function PlaylistDetailScreen() {
               <Pressable
                 style={styles.trackInfo}
                 onPress={() => handleTrackPress(item.id)}
+                onLongPress={() => {
+                  if (!userId) return;
+                  Alert.alert(item.title, undefined, [
+                    {
+                      text: "Play next",
+                      onPress: () => usePlayerStore.getState().playNext(item.id, userId),
+                    },
+                    {
+                      text: "Add to queue",
+                      onPress: () => usePlayerStore.getState().addToQueue(item.id, userId),
+                    },
+                    { text: "Cancel", style: "cancel" },
+                  ]);
+                }}
               >
                 <Text style={styles.trackTitle} numberOfLines={1}>
                   {item.title}
