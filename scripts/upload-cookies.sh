@@ -2,18 +2,23 @@
 set -euo pipefail
 
 # Load .env if present
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/../.env"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ENV_FILE="${PROJECT_ROOT}/.env"
 if [ -f "$ENV_FILE" ]; then
   set -a
   source "$ENV_FILE"
   set +a
 fi
 
-# Upload YouTube cookies to Metropol API
+# Upload YouTube cookies to Metropol API.
 #
 # Usage:
-#   ./scripts/upload-cookies.sh
+#   ./scripts/upload-cookies.sh                  # extract from chrome, upload
+#   ./scripts/upload-cookies.sh --browser=firefox
+#   ./scripts/upload-cookies.sh --rebuild        # also force a Railway rebuild
+#                                                # (use when the API is running stale code,
+#                                                # not for routine cookie refreshes)
 #
 # Required env vars (set in .env or export before running):
 #   METROPOL_API_URL  - API base URL (e.g. https://api.example.com)
@@ -24,7 +29,16 @@ fi
 : "${METROPOL_API_KEY:?Set METROPOL_API_KEY}"
 : "${METROPOL_USER_ID:?Set METROPOL_USER_ID}"
 
-BROWSER="${1:-chrome}"
+BROWSER="chrome"
+REBUILD=0
+for arg in "$@"; do
+  case "$arg" in
+    --rebuild) REBUILD=1 ;;
+    --browser=*) BROWSER="${arg#*=}" ;;
+    chrome|firefox|edge|brave|safari|chromium|opera|vivaldi) BROWSER="$arg" ;;
+    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+  esac
+done
 TMPFILE="$(mktemp /tmp/yt-cookies-XXXXXX.txt)"
 trap 'rm -f "$TMPFILE"' EXIT
 
@@ -48,14 +62,23 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${METROPOL_API_URL}/cookies" -H 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
 
-if [ "$HTTP_CODE" = "200" ]; then
-  echo "Done — cookies uploaded."
-  echo ""
-  echo "If downloads still fail with 'session expired':"
-  echo "  1. Make sure Railway deployed the latest code: railway deployment list"
-  echo "  2. If the latest deploy is SKIPPED, force it: railway redeploy --yes"
-  echo "  3. After deploy completes, re-run this script and retry the download"
-else
+if [ "$HTTP_CODE" != "200" ]; then
   echo "Failed (HTTP ${HTTP_CODE}): ${BODY}"
   exit 1
+fi
+
+echo "Done — cookies uploaded."
+
+if [ "$REBUILD" = "1" ]; then
+  if ! command -v railway >/dev/null 2>&1; then
+    echo "railway CLI not found in PATH — skipping rebuild" >&2
+    exit 1
+  fi
+  echo ""
+  echo "Forcing Railway rebuild from current source (railway up --detach)..."
+  # `railway redeploy` only re-runs the cached image, which can leave
+  # production on stale code. `railway up` always rebuilds from local source.
+  cd "$PROJECT_ROOT"
+  railway up --detach
+  echo "Rebuild triggered. Track progress: railway logs --build"
 fi
