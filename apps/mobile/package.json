@@ -7,6 +7,8 @@
     "dev": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
+    "build:preview": "eas build --profile preview --platform android",
+    "update:preview": "eas update --channel preview",
     "check-types": "tsc --noEmit",
     "apply-patches": "patch-package"
   },
