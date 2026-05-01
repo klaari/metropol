@@ -89,6 +89,28 @@ export const playbackState = pgTable(
   ],
 );
 
+export const queueItems = pgTable(
+  "queue_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id").notNull(),
+    trackId: uuid("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    addedAt: timestamp("added_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("queue_items_user_position_idx").on(table.userId, table.position),
+  ],
+);
+
+export const userPlayerState = pgTable("user_player_state", {
+  userId: text("user_id").primaryKey(),
+  currentPosition: integer("current_position").default(0).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const downloadJobs = pgTable(
   "download_jobs",
   {
