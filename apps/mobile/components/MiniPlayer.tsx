@@ -65,6 +65,14 @@ export default function MiniPlayer() {
         >
           <Ionicons name={playing ? "pause" : "play"} size={22} color="#fff" />
         </Pressable>
+        <Pressable
+          onPress={() => usePlayerStore.getState().setQueueSheetVisible(true)}
+          hitSlop={12}
+          style={styles.queueBtn}
+          android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: true }}
+        >
+          <Ionicons name="list" size={22} color="#fff" />
+        </Pressable>
       </Pressable>
     </View>
   );
@@ -121,6 +129,12 @@ const styles = StyleSheet.create({
   },
   playBtn: {
     width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  queueBtn: {
+    width: 36,
     height: 40,
     justifyContent: "center",
     alignItems: "center",
