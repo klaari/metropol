@@ -2,12 +2,13 @@ import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/clerk-expo";
 import type { WsJobStatusMessage } from "@metropol/types";
 import { useDownloadsStore } from "../store/downloads";
+import { useLibraryStore } from "../store/library";
 
 const WS_URL = process.env.EXPO_PUBLIC_WS_URL;
 const RECONNECT_DELAY = 3000;
 
 export function useDownloadWs() {
-  const { getToken } = useAuth();
+  const { getToken, userId } = useAuth();
   const handleWsMessage = useDownloadsStore((s) => s.handleWsMessage);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,6 +32,9 @@ export function useDownloadWs() {
           const msg: WsJobStatusMessage = JSON.parse(event.data);
           if (msg.type === "job:status") {
             handleWsMessage(msg);
+            if (msg.status === "completed" && msg.trackId && userId) {
+              useLibraryStore.getState().fetchTracks(userId);
+            }
           }
         } catch {
           // Ignore malformed messages
@@ -54,5 +58,5 @@ export function useDownloadWs() {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  }, [getToken, handleWsMessage]);
+  }, [getToken, handleWsMessage, userId]);
 }

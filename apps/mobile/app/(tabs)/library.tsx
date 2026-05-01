@@ -7,8 +7,8 @@ import {
   FileSystemUploadType,
 } from "expo-file-system/legacy";
 import { randomUUID } from "expo-crypto";
-import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
+import { useCallback, useMemo, useState } from "react";
 import {
   ActionSheetIOS,
   ActivityIndicator,
@@ -90,12 +90,14 @@ export default function LibraryScreen() {
     createPlaylist,
   } = usePlaylistsStore();
 
-  useEffect(() => {
-    if (userId) {
-      fetchTracks(userId);
-      fetchPlaylists(userId);
-    }
-  }, [userId]);
+  useFocusEffect(
+    useCallback(() => {
+      if (userId) {
+        fetchTracks(userId);
+        fetchPlaylists(userId);
+      }
+    }, [userId]),
+  );
 
   const handleImport = useCallback(async () => {
     if (!userId) return;
