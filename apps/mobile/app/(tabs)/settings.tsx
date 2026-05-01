@@ -10,6 +10,7 @@ import {
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
+import * as Updates from "expo-updates";
 import { useAuth } from "@clerk/clerk-expo";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -20,6 +21,33 @@ export default function SettingsScreen() {
   const [uploading, setUploading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState(false);
+
+  async function checkForUpdate() {
+    setChecking(true);
+    setUpdateMessage(null);
+    setUpdateError(false);
+    try {
+      const result = await Updates.checkForUpdateAsync();
+      if (!result.isAvailable) {
+        setUpdateMessage("You're on the latest update.");
+      } else {
+        setUpdateMessage("Downloading update...");
+        await Updates.fetchUpdateAsync();
+        setUpdateMessage("Update ready — reloading...");
+        setTimeout(() => Updates.reloadAsync(), 500);
+      }
+    } catch (e) {
+      setUpdateError(true);
+      setUpdateMessage(
+        e instanceof Error ? e.message : "Update check failed",
+      );
+    } finally {
+      setChecking(false);
+    }
+  }
 
   useEffect(() => {
     checkCookieStatus();
@@ -145,6 +173,32 @@ export default function SettingsScreen() {
         )}
       </View>
 
+      {/* App Updates */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>App version</Text>
+        <Text style={styles.versionLine}>
+          Update ID: {Updates.updateId ? Updates.updateId.slice(0, 8) : "embedded"}
+        </Text>
+        <Text style={styles.versionLine}>
+          Created: {Updates.createdAt ? Updates.createdAt.toISOString().slice(0, 19).replace("T", " ") : "—"}
+        </Text>
+        <Text style={styles.versionLine}>
+          Channel: {Updates.channel || "—"}
+        </Text>
+        <Pressable style={styles.checkButton} onPress={checkForUpdate}>
+          {checking ? (
+            <ActivityIndicator color="#000" size="small" />
+          ) : (
+            <Text style={styles.checkButtonText}>Check for updates</Text>
+          )}
+        </Pressable>
+        {updateMessage && (
+          <Text style={[styles.statusMsg, updateError && styles.statusMsgError]}>
+            {updateMessage}
+          </Text>
+        )}
+      </View>
+
       {/* Sign Out */}
       <View style={styles.section}>
         <Pressable style={styles.signOutButton} onPress={() => signOut()}>
@@ -230,6 +284,24 @@ const styles = StyleSheet.create({
   },
   statusMsgError: {
     color: "#ff3b30",
+  },
+  versionLine: {
+    color: "#888",
+    fontSize: 13,
+    fontFamily: "monospace",
+    marginBottom: 4,
+  },
+  checkButton: {
+    backgroundColor: "#fff",
+    borderRadius: 10,
+    padding: 14,
+    alignItems: "center",
+    marginTop: 12,
+  },
+  checkButtonText: {
+    color: "#000",
+    fontSize: 15,
+    fontWeight: "600",
   },
   signOutButton: {
     borderWidth: 1,
