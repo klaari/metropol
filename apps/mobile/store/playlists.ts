@@ -31,7 +31,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
   fetchPlaylists: async (userId) => {
     set({ isLoading: true, error: null });
     try {
-      const rows = await db
+      const rows = await getDb()
         .select({
           id: playlists.id,
           userId: playlists.userId,
@@ -57,7 +57,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
 
   createPlaylist: async (userId, name) => {
     try {
-      const [inserted] = await db
+      const [inserted] = await getDb()
         .insert(playlists)
         .values({ userId, name })
         .returning();
@@ -77,7 +77,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
 
   renamePlaylist: async (playlistId, name) => {
     try {
-      await db
+      await getDb()
         .update(playlists)
         .set({ name, updatedAt: new Date() })
         .where(eq(playlists.id, playlistId));
@@ -106,7 +106,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
   },
 
   getPlaylistTracks: async (playlistId) => {
-    const rows = await db
+    const rows = await getDb()
       .select({
         playlistTrackId: playlistTracks.id,
         position: playlistTracks.position,
@@ -132,7 +132,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
 
   addTracksToPlaylist: async (playlistId, trackIds) => {
     // Get existing entries for this playlist
-    const existing = await db
+    const existing = await getDb()
       .select({ trackId: playlistTracks.trackId, position: playlistTracks.position })
       .from(playlistTracks)
       .where(eq(playlistTracks.playlistId, playlistId))
@@ -167,7 +167,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
   },
 
   removeTrackFromPlaylist: async (playlistTrackId, playlistId) => {
-    await db
+    await getDb()
       .delete(playlistTracks)
       .where(eq(playlistTracks.id, playlistTrackId));
 
@@ -183,7 +183,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
 
   reorderTrack: async (playlistId, fromPos, toPos) => {
     // Fetch all playlist tracks in order
-    const rows = await db
+    const rows = await getDb()
       .select()
       .from(playlistTracks)
       .where(eq(playlistTracks.playlistId, playlistId))
@@ -199,7 +199,7 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
     // Update positions
     for (let i = 0; i < items.length; i++) {
       if (items[i]!.position !== i) {
-        await db
+        await getDb()
           .update(playlistTracks)
           .set({ position: i })
           .where(eq(playlistTracks.id, items[i]!.id));
