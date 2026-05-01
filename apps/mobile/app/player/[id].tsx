@@ -103,23 +103,27 @@ export default function PlayerScreen() {
   }
 
   const [playDebug, setPlayDebug] = useState("");
+  const dbgPlay = (msg: string) => {
+    console.log("[player.toggle]", msg);
+    setPlayDebug(msg);
+  };
 
   async function togglePlayPause() {
     const tp = getTrackPlayer();
-    if (!tp) { setPlayDebug("no tp instance"); return; }
+    if (!tp) { dbgPlay("no tp instance"); return; }
     try {
       if (playing) {
         await tp.pause();
         if (userId) savePosition(userId);
-        setPlayDebug("paused");
+        dbgPlay("paused");
       } else {
-        setPlayDebug("calling play...");
+        dbgPlay("calling play...");
         await tp.play();
         const st = await tp.getPlaybackState();
-        setPlayDebug(`play() done, state=${JSON.stringify(st)}`);
+        dbgPlay(`play() done, state=${JSON.stringify(st)}`);
       }
     } catch (e: any) {
-      setPlayDebug(`ERROR: ${e?.message ?? e}`);
+      dbgPlay(`ERROR: ${e?.message ?? e}`);
     }
   }
 

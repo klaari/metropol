@@ -49,7 +49,11 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   loadTrack: async (trackId, userId) => {
     const log: string[] = [];
-    const dbg = (msg: string) => { log.push(msg); set({ debugInfo: log.join("\n") }); };
+    const dbg = (msg: string) => {
+      console.log("[player.loadTrack]", msg);
+      log.push(msg);
+      set({ debugInfo: log.join("\n") });
+    };
 
     try {
       dbg("setupPlayer...");
@@ -95,14 +99,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
       if (playerReady && tp) {
         const url = await getDownloadUrl(track.fileKey);
-        dbg(`url=${url?.substring(0, 80)}...`);
+        dbg(`FULL_URL=${url}`);
 
-        // Verify URL is accessible
         try {
-          const resp = await fetch(url, { method: "HEAD" });
-          dbg(`HEAD ${resp.status} ${resp.headers.get("content-type")} len=${resp.headers.get("content-length")}`);
+          const resp = await fetch(url, { headers: { Range: "bytes=0-0" } });
+          const body = await resp.text();
+          dbg(`GET ${resp.status} ct=${resp.headers.get("content-type")} len=${resp.headers.get("content-length")} body=${body.substring(0, 200)}`);
         } catch (e: any) {
-          dbg(`HEAD failed: ${e?.message}`);
+          dbg(`GET failed: ${e?.message}`);
         }
 
         await tp.reset();
