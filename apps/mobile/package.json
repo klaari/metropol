@@ -10,7 +10,7 @@
     "build:preview": "eas build --profile preview --platform android",
     "update:preview": "eas update --channel preview",
     "check-types": "tsc --noEmit",
-    "apply-patches": "patch-package"
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.700.0",
@@ -42,6 +42,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "patch-package": "^8.0.1",
     "typescript": "~5.9.2"
   },
   "expo": {

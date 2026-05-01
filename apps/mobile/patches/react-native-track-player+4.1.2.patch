@@ -1,22 +1,21 @@
 diff --git a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt
-index 13a6c60..09370d8 100644
 --- a/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt
 +++ b/node_modules/react-native-track-player/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt
-@@ -490,7 +490,7 @@ class MusicModule(reactContext: ReactApplicationContext) : NativeTrackPlayerSpec
+@@ -545,7 +545,7 @@
+         if (verifyServiceBoundOrReject(callback)) return@launch
  
-         val indexInt = index.toInt()
-         if (indexInt >= 0 && indexInt < musicService.tracks.size) {
--            callback.resolve(Arguments.fromBundle(musicService.tracks[indexInt].originalItem))
-+            callback.resolve(Arguments.fromBundle(musicService.tracks[indexInt].originalItem ?: Bundle()))
+         if (index >= 0 && index < musicService.tracks.size) {
+-            callback.resolve(Arguments.fromBundle(musicService.tracks[index].originalItem))
++            callback.resolve(Arguments.fromBundle(musicService.tracks[index].originalItem ?: Bundle()))
          } else {
              callback.resolve(null)
          }
-@@ -525,7 +525,7 @@ class MusicModule(reactContext: ReactApplicationContext) : NativeTrackPlayerSpec
-         if (verifyServiceBoundOrReject(callback)) return@launchInScope
+@@ -585,7 +585,7 @@
          callback.resolve(
-             musicService.currentTrack?.let {
--                Arguments.fromBundle(it.originalItem)
-+                Arguments.fromBundle(it.originalItem ?: Bundle())
-             }
+             if (musicService.tracks.isEmpty()) null
+             else Arguments.fromBundle(
+-                musicService.tracks[musicService.getCurrentTrackIndex()].originalItem
++                musicService.tracks[musicService.getCurrentTrackIndex()].originalItem ?: Bundle()
+             )
          )
      }
