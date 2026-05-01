@@ -94,3 +94,34 @@ export function registerPlaybackService() {
     // Native module not available
   }
 }
+
+/**
+ * Foreground event listeners that mirror RNTP queue state into usePlayerStore.
+ * Returns an unsubscribe function. Call once after setupPlayer succeeds.
+ */
+export function attachQueueListeners(): () => void {
+  if (!TrackPlayer) return () => {};
+  try {
+    const { Event } = require("react-native-track-player");
+    const { usePlayerStore } = require("../store/player");
+
+    const sub1 = TrackPlayer.addEventListener(
+      Event.PlaybackActiveTrackChanged,
+      (e: { index?: number }) => {
+        if (typeof e.index === "number") {
+          usePlayerStore.getState().onActiveTrackChanged(e.index);
+        }
+      },
+    );
+    const sub2 = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
+      usePlayerStore.getState().onQueueEnded();
+    });
+
+    return () => {
+      sub1?.remove?.();
+      sub2?.remove?.();
+    };
+  } catch {
+    return () => {};
+  }
+}

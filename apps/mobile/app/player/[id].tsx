@@ -30,9 +30,12 @@ export default function PlayerScreen() {
   const router = useRouter();
 
   const {
+    queue,
+    currentIndex,
     currentTrack,
     playbackRate,
-    loadTrack,
+    playWithQueue,
+    skipToIndex,
     setRate,
     savePosition,
     debugInfo,
@@ -41,15 +44,23 @@ export default function PlayerScreen() {
     duration,
   } = usePlayerStore();
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [editingBpm, setEditingBpm] = useState(false);
   const [bpmInput, setBpmInput] = useState("");
   const seekBarWidth = useRef(0);
 
   useEffect(() => {
     if (!id || !userId) return;
+    if (currentTrack?.id === id) return;
+
+    const idxInQueue = queue.findIndex((q) => q.trackId === id);
+    if (idxInQueue >= 0) {
+      skipToIndex(idxInQueue, userId);
+      return;
+    }
+
     setLoading(true);
-    loadTrack(id, userId).finally(() => setLoading(false));
+    playWithQueue([id], 0, userId).finally(() => setLoading(false));
 
     return () => {
       if (userId) savePosition(userId);
@@ -172,6 +183,12 @@ export default function PlayerScreen() {
       <View style={styles.header}>
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <Text style={styles.backArrow}>‹</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => usePlayerStore.getState().setQueueSheetVisible(true)}
+          hitSlop={12}
+        >
+          <Ionicons name="list" size={26} color="#fff" />
         </Pressable>
       </View>
 
@@ -313,6 +330,10 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 56,
     left: 16,
+    right: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   backArrow: {
     color: "#fff",

@@ -1,12 +1,20 @@
-import { playbackState, tracks, userTracks } from "@metropol/db";
+import { playbackState, queueItems, tracks, userPlayerState, userTracks } from "@metropol/db";
 import type { Track } from "@metropol/types";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { create } from "zustand";
 import { getDb } from "../lib/db";
 import { getDownloadUrl } from "../lib/r2";
 import { getTrackPlayer, setupPlayer } from "../lib/trackPlayer";
 
+export interface QueueItem {
+  trackId: string;
+  track: Track;
+}
+
 interface PlayerState {
+  queue: QueueItem[];
+  currentIndex: number;
+
   currentTrack: Track | null;
   playbackRate: number;
   currentPlaylistId: string | null;
@@ -14,11 +22,23 @@ interface PlayerState {
   playing: boolean;
   position: number;
   duration: number;
+  initialized: boolean;
+  queueSheetVisible: boolean;
 
-  loadTrack: (trackId: string, userId: string) => Promise<void>;
+  initQueue: (userId: string) => Promise<void>;
+  playWithQueue: (trackIds: string[], startIndex: number, userId: string) => Promise<void>;
+  addToQueue: (trackId: string, userId: string) => Promise<void>;
+  playNext: (trackId: string, userId: string) => Promise<void>;
+  removeAt: (index: number, userId: string) => Promise<void>;
+  skipToIndex: (index: number, userId: string) => Promise<void>;
+  reorder: (from: number, to: number, userId: string) => Promise<void>;
+  onActiveTrackChanged: (newIndex: number) => void;
+  onQueueEnded: () => void;
+
   setRate: (rate: number, userId: string) => Promise<void>;
   savePosition: (userId: string) => Promise<void>;
   setPlaylistContext: (playlistId: string | null) => void;
+  setQueueSheetVisible: (visible: boolean) => void;
   reset: () => void;
 }
 
@@ -43,7 +63,6 @@ function startPolling() {
   }, 200);
 }
 
-/** Upsert a partial playback state row — only the provided fields are updated. */
 async function upsertPlaybackState(
   userId: string,
   trackId: string,
@@ -65,7 +84,84 @@ async function upsertPlaybackState(
 
 let saveDebounce: ReturnType<typeof setTimeout> | null = null;
 
+async function fetchTracks(trackIds: string[], userId: string): Promise<Track[]> {
+  if (trackIds.length === 0) return [];
+  const rows = await getDb()
+    .select({
+      id: tracks.id,
+      youtubeId: tracks.youtubeId,
+      title: tracks.title,
+      artist: tracks.artist,
+      duration: tracks.duration,
+      fileKey: tracks.fileKey,
+      fileSize: tracks.fileSize,
+      format: tracks.format,
+      sourceUrl: tracks.sourceUrl,
+      downloadedAt: tracks.downloadedAt,
+      originalBpm: userTracks.originalBpm,
+    })
+    .from(userTracks)
+    .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
+    .where(eq(userTracks.userId, userId));
+
+  const byId = new Map<string, Track>(rows.map((r) => [r.id, r as Track]));
+  return trackIds.map((id) => byId.get(id)).filter((t): t is Track => t != null);
+}
+
+async function buildRntpTrack(track: Track) {
+  const url = await getDownloadUrl(track.fileKey);
+  return {
+    id: track.id,
+    url,
+    title: track.title,
+    artist: track.artist ?? undefined,
+    duration: track.duration ?? undefined,
+  };
+}
+
+async function persistQueue(
+  userId: string,
+  items: QueueItem[],
+  currentIndex: number,
+) {
+  const db = getDb();
+  await db.delete(queueItems).where(eq(queueItems.userId, userId));
+  if (items.length > 0) {
+    await db.insert(queueItems).values(
+      items.map((it, i) => ({
+        userId,
+        trackId: it.trackId,
+        position: i,
+      })),
+    );
+  }
+  await db
+    .insert(userPlayerState)
+    .values({
+      userId,
+      currentPosition: Math.max(0, currentIndex),
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: userPlayerState.userId,
+      set: { currentPosition: Math.max(0, currentIndex), updatedAt: new Date() },
+    });
+}
+
+let persistDebounce: ReturnType<typeof setTimeout> | null = null;
+function schedulePersist(userId: string) {
+  if (persistDebounce) clearTimeout(persistDebounce);
+  persistDebounce = setTimeout(() => {
+    const { queue, currentIndex } = usePlayerStore.getState();
+    persistQueue(userId, queue, currentIndex).catch((e) => {
+      console.warn("[player.persist]", e?.message ?? e);
+    });
+  }, 400);
+}
+
 export const usePlayerStore = create<PlayerState>((set, get) => ({
+  queue: [],
+  currentIndex: -1,
   currentTrack: null,
   playbackRate: 1.0,
   currentPlaylistId: null,
@@ -73,103 +169,228 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   playing: false,
   position: 0,
   duration: 0,
+  initialized: false,
+  queueSheetVisible: false,
 
-  loadTrack: async (trackId, userId) => {
-    if (get().currentTrack?.id === trackId) {
-      console.log("[player.loadTrack]", `already loaded ${trackId} — keeping playback`);
+  initQueue: async (userId) => {
+    if (get().initialized) return;
+    set({ initialized: true });
+
+    try {
+      await setupPlayer();
+      startPolling();
+
+      const dbItems = await getDb()
+        .select({ trackId: queueItems.trackId, position: queueItems.position })
+        .from(queueItems)
+        .where(eq(queueItems.userId, userId))
+        .orderBy(asc(queueItems.position));
+
+      if (dbItems.length === 0) return;
+
+      const fetched = await fetchTracks(
+        dbItems.map((d) => d.trackId),
+        userId,
+      );
+      const queue: QueueItem[] = fetched.map((t) => ({ trackId: t.id, track: t }));
+
+      const [stateRow] = await getDb()
+        .select()
+        .from(userPlayerState)
+        .where(eq(userPlayerState.userId, userId));
+      let idx = Math.max(0, Math.min(queue.length - 1, stateRow?.currentPosition ?? 0));
+
+      const tp = getTrackPlayer();
+      if (tp && queue.length > 0) {
+        const rntpTracks = await Promise.all(queue.map((q) => buildRntpTrack(q.track)));
+        await tp.reset();
+        await tp.add(rntpTracks);
+        if (idx > 0) await tp.skip(idx);
+
+        const [saved] = await getDb()
+          .select()
+          .from(playbackState)
+          .where(
+            and(
+              eq(playbackState.userId, userId),
+              eq(playbackState.trackId, queue[idx]!.trackId),
+            ),
+          );
+        const rate = saved?.playbackRate ?? 1.0;
+        const pos = saved?.lastPosition ?? 0;
+        await tp.setRate(rate);
+        if (pos > 0) await tp.seekTo(pos);
+
+        set({ queue, currentIndex: idx, currentTrack: queue[idx]!.track, playbackRate: rate });
+      }
+    } catch (e: any) {
+      console.warn("[player.initQueue]", e?.message ?? e);
+    }
+  },
+
+  playWithQueue: async (trackIds, startIndex, userId) => {
+    if (trackIds.length === 0) return;
+    const fetched = await fetchTracks(trackIds, userId);
+    if (fetched.length === 0) return;
+    const queue: QueueItem[] = fetched.map((t) => ({ trackId: t.id, track: t }));
+    const idx = Math.max(0, Math.min(queue.length - 1, startIndex));
+
+    const tp = getTrackPlayer();
+    if (!tp) {
+      set({ queue, currentIndex: idx, currentTrack: queue[idx]!.track });
+      schedulePersist(userId);
       return;
     }
 
-    const log: string[] = [];
-    const dbg = (msg: string) => {
-      console.log("[player.loadTrack]", msg);
-      log.push(msg);
-      set({ debugInfo: log.join("\n") });
-    };
+    const rntpTracks = await Promise.all(queue.map((q) => buildRntpTrack(q.track)));
+    await tp.reset();
+    await tp.add(rntpTracks);
+    if (idx > 0) await tp.skip(idx);
 
-    try {
-      dbg("setupPlayer...");
-      const playerReady = await setupPlayer();
-      const tp = getTrackPlayer();
-      dbg(`ready=${playerReady} tp=${!!tp}`);
-      if (playerReady) startPolling();
+    const [saved] = await getDb()
+      .select()
+      .from(playbackState)
+      .where(
+        and(
+          eq(playbackState.userId, userId),
+          eq(playbackState.trackId, queue[idx]!.trackId),
+        ),
+      );
+    const rate = saved?.playbackRate ?? 1.0;
+    const pos = saved?.lastPosition ?? 0;
+    await tp.setRate(rate);
+    if (pos > 0) await tp.seekTo(pos);
+    await tp.play();
 
-      // Fetch track from DB (join through userTracks for userId scoping)
-      const [track] = await getDb()
-        .select({
-          id: tracks.id,
-          youtubeId: tracks.youtubeId,
-          title: tracks.title,
-          artist: tracks.artist,
-          duration: tracks.duration,
-          fileKey: tracks.fileKey,
-          fileSize: tracks.fileSize,
-          format: tracks.format,
-          sourceUrl: tracks.sourceUrl,
-          downloadedAt: tracks.downloadedAt,
-          originalBpm: userTracks.originalBpm,
-        })
-        .from(userTracks)
-        .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
-        .where(and(eq(tracks.id, trackId), eq(userTracks.userId, userId)));
+    set({
+      queue,
+      currentIndex: idx,
+      currentTrack: queue[idx]!.track,
+      playbackRate: rate,
+    });
+    schedulePersist(userId);
+  },
 
-      if (!track) { dbg("track NOT FOUND in DB"); return; }
-      dbg(`track="${track.title}" key=${track.fileKey}`);
+  addToQueue: async (trackId, userId) => {
+    const [track] = await fetchTracks([trackId], userId);
+    if (!track) return;
+    const tp = getTrackPlayer();
+    const newItem: QueueItem = { trackId: track.id, track };
 
-      // Fetch saved playback state
-      const [saved] = await getDb()
-        .select()
-        .from(playbackState)
-        .where(
-          and(
-            eq(playbackState.trackId, trackId),
-            eq(playbackState.userId, userId),
-          ),
-        );
+    const { queue } = get();
+    const newQueue = [...queue, newItem];
 
-      const rate = saved?.playbackRate ?? 1.0;
-      const position = saved?.lastPosition ?? 0;
+    if (tp) await tp.add(await buildRntpTrack(track));
 
-      if (playerReady && tp) {
-        const url = await getDownloadUrl(track.fileKey);
-        dbg(`FULL_URL=${url}`);
+    set({ queue: newQueue });
+    schedulePersist(userId);
+  },
 
-        try {
-          const resp = await fetch(url, { headers: { Range: "bytes=0-0" } });
-          const body = await resp.text();
-          dbg(`GET ${resp.status} ct=${resp.headers.get("content-type")} len=${resp.headers.get("content-length")} body=${body.substring(0, 200)}`);
-        } catch (e: any) {
-          dbg(`GET failed: ${e?.message}`);
-        }
+  playNext: async (trackId, userId) => {
+    const [track] = await fetchTracks([trackId], userId);
+    if (!track) return;
+    const tp = getTrackPlayer();
+    const newItem: QueueItem = { trackId: track.id, track };
 
-        await tp.reset();
-        await tp.add({
-          url,
-          title: track.title,
-          artist: track.artist ?? undefined,
-          duration: track.duration ?? undefined,
-        });
+    const { queue, currentIndex } = get();
+    const insertAt = currentIndex < 0 ? 0 : currentIndex + 1;
+    const newQueue = [...queue.slice(0, insertAt), newItem, ...queue.slice(insertAt)];
 
-        const queue = await tp.getQueue();
-        const state = await tp.getPlaybackState();
-        dbg(`queue=${queue.length} state=${JSON.stringify(state)}`);
+    if (tp) await tp.add(await buildRntpTrack(track), insertAt);
 
-        await tp.setRate(rate);
+    set({ queue: newQueue });
+    schedulePersist(userId);
+  },
 
-        if (position > 0) {
-          await tp.seekTo(position);
-        }
-        dbg("load complete");
-      } else {
-        dbg(`SKIP: ready=${playerReady} tp=${!!tp}`);
-      }
+  removeAt: async (index, userId) => {
+    const { queue, currentIndex } = get();
+    if (index < 0 || index >= queue.length) return;
+    const tp = getTrackPlayer();
 
-      set({ currentTrack: track as Track, playbackRate: rate });
-    } catch (e: any) {
-      dbg(`ERROR: ${e?.message ?? e}`);
+    const newQueue = queue.slice(0, index).concat(queue.slice(index + 1));
+    let newIndex = currentIndex;
+    if (index < currentIndex) newIndex = currentIndex - 1;
+    else if (index === currentIndex) {
+      newIndex = Math.min(currentIndex, newQueue.length - 1);
     }
 
-    // Update lastPlayedAt (if column exists — skip for now as schema has no lastPlayedAt)
+    if (tp) {
+      try {
+        await tp.remove(index);
+      } catch (e: any) {
+        console.warn("[player.removeAt]", e?.message ?? e);
+      }
+    }
+
+    set({
+      queue: newQueue,
+      currentIndex: newIndex,
+      currentTrack: newIndex >= 0 ? newQueue[newIndex]!.track : null,
+    });
+    schedulePersist(userId);
+  },
+
+  skipToIndex: async (index, userId) => {
+    const { queue } = get();
+    if (index < 0 || index >= queue.length) return;
+    const tp = getTrackPlayer();
+
+    if (tp) {
+      try {
+        await tp.skip(index);
+        await tp.play();
+      } catch (e: any) {
+        console.warn("[player.skipToIndex]", e?.message ?? e);
+      }
+    }
+
+    set({ currentIndex: index, currentTrack: queue[index]!.track });
+    schedulePersist(userId);
+  },
+
+  reorder: async (from, to, userId) => {
+    const { queue, currentIndex } = get();
+    if (from < 0 || from >= queue.length || to < 0 || to >= queue.length) return;
+    if (from === to) return;
+    const tp = getTrackPlayer();
+
+    const next = [...queue];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved!);
+
+    let newIndex = currentIndex;
+    if (from === currentIndex) newIndex = to;
+    else if (from < currentIndex && to >= currentIndex) newIndex = currentIndex - 1;
+    else if (from > currentIndex && to <= currentIndex) newIndex = currentIndex + 1;
+
+    if (tp) {
+      try {
+        await tp.move(from, to);
+      } catch (e: any) {
+        console.warn("[player.reorder]", e?.message ?? e);
+      }
+    }
+
+    set({
+      queue: next,
+      currentIndex: newIndex,
+      currentTrack: newIndex >= 0 ? next[newIndex]!.track : null,
+    });
+    schedulePersist(userId);
+  },
+
+  onActiveTrackChanged: (newIndex) => {
+    const { queue, currentIndex } = get();
+    if (newIndex < 0 || newIndex >= queue.length) return;
+    if (newIndex === currentIndex) return;
+    set({
+      currentIndex: newIndex,
+      currentTrack: queue[newIndex]!.track,
+    });
+  },
+
+  onQueueEnded: () => {
+    set({ playing: false });
   },
 
   setRate: async (rate, userId) => {
@@ -201,7 +422,18 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({ currentPlaylistId: playlistId });
   },
 
+  setQueueSheetVisible: (visible) => {
+    set({ queueSheetVisible: visible });
+  },
+
   reset: () => {
-    set({ currentTrack: null, playbackRate: 1.0, currentPlaylistId: null });
+    set({
+      queue: [],
+      currentIndex: -1,
+      currentTrack: null,
+      playbackRate: 1.0,
+      currentPlaylistId: null,
+      initialized: false,
+    });
   },
 }));

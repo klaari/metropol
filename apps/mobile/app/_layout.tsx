@@ -5,9 +5,12 @@ import { ErrorBoundary } from "expo-router";
 import { Slot } from "expo-router";
 import React, { useEffect } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
-import { registerPlaybackService, setupPlayer } from "../lib/trackPlayer";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import QueueSheet from "../components/QueueSheet";
+import { attachQueueListeners, registerPlaybackService, setupPlayer } from "../lib/trackPlayer";
 import { useDownloadWs } from "../hooks/useDownloadWs";
 import { useAppResumeFetch } from "../hooks/useAppResumeFetch";
+import { usePlayerStore } from "../store/player";
 
 const publishableKey = process.env.EXPO_PUBLIC_CLERK_PUBLISHABLE_KEY;
 
@@ -16,8 +19,13 @@ if (!publishableKey) {
 }
 
 function AuthenticatedHooks() {
+  const { userId } = useAuth();
+  const initQueue = usePlayerStore((s) => s.initQueue);
   useDownloadWs();
   useAppResumeFetch();
+  useEffect(() => {
+    if (userId) initQueue(userId);
+  }, [userId, initQueue]);
   return null;
 }
 
@@ -37,6 +45,7 @@ function ClerkGate() {
     <>
       {isSignedIn && <AuthenticatedHooks />}
       <Slot />
+      {isSignedIn && <QueueSheet />}
     </>
   );
 }
@@ -45,14 +54,21 @@ export { ErrorBoundary };
 
 export default function RootLayout() {
   useEffect(() => {
-    // Register and set up audio player after mount — not at module level
     registerPlaybackService();
-    setupPlayer();
+    let detach: (() => void) | undefined;
+    setupPlayer().then((ok) => {
+      if (ok) detach = attachQueueListeners();
+    });
+    return () => {
+      detach?.();
+    };
   }, []);
 
   return (
-    <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
-      <ClerkGate />
-    </ClerkProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
+        <ClerkGate />
+      </ClerkProvider>
+    </GestureHandlerRootView>
   );
 }
