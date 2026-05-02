@@ -55,7 +55,13 @@ export default function MiniPlayer() {
           <Text style={styles.bpmValue}>
             {currentBpm != null ? currentBpm.toFixed(1) : "—"}
           </Text>
-          <Text style={styles.bpmLabel}>BPM</Text>
+          {playbackRate !== 1 && originalBpm != null ? (
+            <Text style={[styles.bpmLabel, styles.bpmLabelAltered]}>
+              {originalBpm}
+            </Text>
+          ) : (
+            <Text style={styles.bpmLabel}>BPM</Text>
+          )}
         </View>
         <Pressable
           onPress={togglePlayPause}
@@ -156,5 +162,11 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 0.6,
     marginTop: -1,
+  },
+  bpmLabelAltered: {
+    color: "#f5a623",
+    fontSize: 11,
+    fontVariant: ["tabular-nums"],
+    letterSpacing: 0,
   },
 });

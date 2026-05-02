@@ -373,20 +373,18 @@ export default function PlayerScreen() {
 
       {/* BPM Display */}
       <View style={styles.bpmSection}>
-        <View style={styles.bpmRow}>
-          <Text style={styles.bpmLabel}>Current BPM</Text>
+        <Pressable onPress={startBpmEdit} hitSlop={6} style={styles.bpmRow}>
+          <Text style={styles.bpmLabel}>BPM</Text>
           <Text style={styles.bpmValue}>
             {currentBpm != null ? currentBpm.toFixed(1) : "—"}
           </Text>
-        </View>
-        <View style={styles.bpmRow}>
-          <Text style={styles.bpmLabel}>Original BPM</Text>
-          <Pressable onPress={startBpmEdit} hitSlop={6}>
-            <Text style={styles.bpmValue}>
-              {originalBpm != null ? String(originalBpm) : "—"}
-            </Text>
-          </Pressable>
-        </View>
+        </Pressable>
+        {playbackRate !== 1 && originalBpm != null ? (
+          <View style={[styles.bpmRow, styles.bpmRowSecondary]}>
+            <Text style={styles.bpmLabelSecondary}>Original</Text>
+            <Text style={styles.bpmValueSecondary}>{originalBpm}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Debug overlay */}
@@ -679,14 +677,30 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  bpmRowSecondary: {
+    paddingTop: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: "#222",
+    marginTop: -2,
+  },
   bpmLabel: {
     color: "#888",
     fontSize: 14,
   },
   bpmValue: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 22,
     fontWeight: "600",
+    fontVariant: ["tabular-nums"],
+  },
+  bpmLabelSecondary: {
+    color: "#666",
+    fontSize: 12,
+  },
+  bpmValueSecondary: {
+    color: "#888",
+    fontSize: 13,
+    fontVariant: ["tabular-nums"],
   },
   bpmEditRow: {
     flexDirection: "row",
