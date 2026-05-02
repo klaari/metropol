@@ -32,6 +32,7 @@ export const userTracks = pgTable(
       .references(() => tracks.id, { onDelete: "cascade" }),
     addedAt: timestamp("added_at").defaultNow().notNull(),
     originalBpm: real("original_bpm"),
+    localUri: text("local_uri"),
   },
   (t) => [uniqueIndex("user_tracks_user_track_idx").on(t.userId, t.trackId)],
 );
