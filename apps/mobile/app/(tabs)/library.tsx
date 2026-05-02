@@ -27,6 +27,7 @@ import EditTrackModal from "../../components/EditTrackModal";
 import TrackItem from "../../components/TrackItem";
 import { getDb } from "../../lib/db";
 import { buildFileKey, getUploadUrl } from "../../lib/r2";
+import { ensureLocalCopy } from "../../lib/localAudio";
 import { type SortOption, useLibraryStore } from "../../store/library";
 import { usePlayerStore } from "../../store/player";
 import { usePlaylistsStore } from "../../store/playlists";
@@ -148,6 +149,9 @@ export default function LibraryScreen() {
         .returning();
 
       addTrack(inserted as Track);
+      ensureLocalCopy(inserted as Track, userId).catch((e) =>
+        console.warn("[localAudio] import cache failed:", e?.message ?? e),
+      );
       console.log("[import] done!");
     } catch (err) {
       console.error("[import] error:", err);

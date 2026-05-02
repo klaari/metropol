@@ -3,6 +3,7 @@ import type { Track } from "@metropol/types";
 import { eq, and, asc } from "drizzle-orm";
 import { create } from "zustand";
 import { getDb } from "../lib/db";
+import { ensureLocalCopy, hasLocalCopy } from "../lib/localAudio";
 import { getDownloadUrl } from "../lib/r2";
 import { getTrackPlayer, setupPlayer } from "../lib/trackPlayer";
 
@@ -99,6 +100,7 @@ async function fetchTracks(trackIds: string[], userId: string): Promise<Track[]>
       sourceUrl: tracks.sourceUrl,
       downloadedAt: tracks.downloadedAt,
       originalBpm: userTracks.originalBpm,
+      localUri: userTracks.localUri,
     })
     .from(userTracks)
     .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
@@ -109,7 +111,10 @@ async function fetchTracks(trackIds: string[], userId: string): Promise<Track[]>
 }
 
 async function buildRntpTrack(track: Track) {
-  const url = await getDownloadUrl(track.fileKey);
+  const localUri = (track as any).localUri as string | undefined;
+  const url = localUri && hasLocalCopy(localUri)
+    ? localUri
+    : await getDownloadUrl(track.fileKey);
   return {
     id: track.id,
     url,

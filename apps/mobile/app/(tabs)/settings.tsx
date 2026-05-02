@@ -12,11 +12,12 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Updates from "expo-updates";
 import { useAuth } from "@clerk/clerk-expo";
+import { backfillLocalCache, clearLocalCache, getCacheSizeBytes } from "../../lib/localAudio";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
 export default function SettingsScreen() {
-  const { getToken, signOut } = useAuth();
+  const { getToken, signOut, userId } = useAuth();
   const [cookieStatus, setCookieStatus] = useState<boolean | null>(null);
   const [uploading, setUploading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -24,6 +25,59 @@ export default function SettingsScreen() {
   const [checking, setChecking] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const [updateError, setUpdateError] = useState(false);
+  const [cacheBytes, setCacheBytes] = useState(0);
+  const [clearing, setClearing] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  function refreshCacheSize() {
+    setCacheBytes(getCacheSizeBytes());
+  }
+
+  useEffect(() => {
+    refreshCacheSize();
+  }, []);
+
+  async function handleClearCache() {
+    if (!userId) return;
+    Alert.alert(
+      "Clear local audio?",
+      "Tracks will stream from R2 next time and re-download in the background.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Clear",
+          style: "destructive",
+          onPress: async () => {
+            setClearing(true);
+            try {
+              await clearLocalCache(userId);
+              refreshCacheSize();
+            } finally {
+              setClearing(false);
+            }
+          },
+        },
+      ],
+    );
+  }
+
+  async function handleDownloadAll() {
+    if (!userId) return;
+    setDownloading(true);
+    try {
+      await backfillLocalCache(userId);
+      refreshCacheSize();
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  function formatBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+    return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+  }
 
   async function checkForUpdate() {
     setChecking(true);
@@ -171,6 +225,44 @@ export default function SettingsScreen() {
             {statusMessage}
           </Text>
         )}
+      </View>
+
+      {/* Local audio */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Local audio</Text>
+        <Text style={styles.description}>
+          Tracks are downloaded to this device so playback starts instantly.
+          New tracks download in the background; tap below to force a refresh
+          or clear the cache.
+        </Text>
+        <View style={styles.statusRow}>
+          <Text style={styles.statusLabel}>Used:</Text>
+          <Text style={styles.statusLoaded}>{formatBytes(cacheBytes)}</Text>
+        </View>
+        <View style={{ flexDirection: "row", gap: 10 }}>
+          <Pressable
+            style={[styles.checkButton, { flex: 1 }, downloading && styles.buttonDisabled]}
+            onPress={handleDownloadAll}
+            disabled={downloading}
+          >
+            {downloading ? (
+              <ActivityIndicator color="#000" size="small" />
+            ) : (
+              <Text style={styles.checkButtonText}>Download all</Text>
+            )}
+          </Pressable>
+          <Pressable
+            style={[styles.checkButton, { flex: 1, backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#333" }, clearing && styles.buttonDisabled]}
+            onPress={handleClearCache}
+            disabled={clearing}
+          >
+            {clearing ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Text style={[styles.checkButtonText, { color: "#fff" }]}>Clear cache</Text>
+            )}
+          </Pressable>
+        </View>
       </View>
 
       {/* App Updates */}

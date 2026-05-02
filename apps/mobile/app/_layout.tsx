@@ -7,6 +7,7 @@ import React, { useEffect } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import QueueSheet from "../components/QueueSheet";
+import { backfillLocalCache } from "../lib/localAudio";
 import { attachQueueListeners, registerPlaybackService, setupPlayer } from "../lib/trackPlayer";
 import { useDownloadWs } from "../hooks/useDownloadWs";
 import { useAppResumeFetch } from "../hooks/useAppResumeFetch";
@@ -24,7 +25,11 @@ function AuthenticatedHooks() {
   useDownloadWs();
   useAppResumeFetch();
   useEffect(() => {
-    if (userId) initQueue(userId);
+    if (!userId) return;
+    initQueue(userId);
+    backfillLocalCache(userId).catch((e) =>
+      console.warn("[localAudio] backfill error:", e?.message ?? e),
+    );
   }, [userId, initQueue]);
   return null;
 }

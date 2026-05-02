@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/clerk-expo";
 import type { WsJobStatusMessage } from "@metropol/types";
+import { backfillLocalCache } from "../lib/localAudio";
 import { useDownloadsStore } from "../store/downloads";
 import { useLibraryStore } from "../store/library";
 
@@ -34,6 +35,12 @@ export function useDownloadWs() {
             handleWsMessage(msg);
             if (msg.status === "completed" && msg.trackId && userId) {
               useLibraryStore.getState().fetchTracks(userId);
+              backfillLocalCache(userId).catch((e) =>
+                console.warn(
+                  "[localAudio] post-completion backfill:",
+                  e?.message ?? e,
+                ),
+              );
             }
           }
         } catch {
