@@ -5,6 +5,7 @@ import { downloadJobs, tracks, userTracks } from "@metropol/db";
 import type { WsJobStatusMessage, DownloadJobStatus } from "@metropol/types";
 import { env } from "../lib/env";
 import { uploadToR2, deleteFromR2 } from "../lib/r2";
+import { detectBpm } from "../lib/bpm";
 import { getMetadata, downloadAudio, type YtDlpOptions } from "./ytdlp";
 import { loadUserCookies } from "../routes/cookies";
 import { setProcessor, enqueue, type QueueJob } from "./queue";
@@ -95,6 +96,11 @@ async function processJob(job: QueueJob) {
     const fileData = await Bun.file(result.filePath).arrayBuffer();
     await uploadToR2(fileKey, new Uint8Array(fileData), "audio/mp4");
 
+    const originalBpm = await detectBpm(result.filePath);
+    if (originalBpm != null) {
+      console.log(`[processor] BPM detected for ${trackId}: ${originalBpm}`);
+    }
+
     // Step 7: Insert into global tracks table (no userId)
     if (!youtubeId) {
       throw new Error("youtubeId missing from job — cannot insert global track");
@@ -114,7 +120,7 @@ async function processJob(job: QueueJob) {
     // Step 8: Link track to user in user_tracks
     await db
       .insert(userTracks)
-      .values({ userId, trackId })
+      .values({ userId, trackId, originalBpm })
       .onConflictDoNothing();
 
     // Step 9: Mark job completed

@@ -6,6 +6,7 @@ import { clerkAuth } from "../middleware/auth";
 import { env } from "../lib/env";
 import { enqueue } from "../jobs/queue";
 import { getPresignedUrl, uploadToR2 } from "../lib/r2";
+import { detectBpm } from "../lib/bpm";
 
 const db = createDb(env.databaseUrl);
 
@@ -213,6 +214,7 @@ downloadRoute.post("/tracks/upload", async (c) => {
 
   const tmpPath = `/tmp/metropol-upload-${trackId}.${format}`;
   let duration: number | null = null;
+  let originalBpm: number | null = null;
   try {
     await Bun.write(tmpPath, buffer);
     const proc = Bun.spawn(
@@ -225,8 +227,9 @@ downloadRoute.post("/tracks/upload", async (c) => {
     if (parsed.format?.duration) {
       duration = Math.round(Number(parsed.format.duration));
     }
+    originalBpm = await detectBpm(tmpPath);
   } catch {
-    // duration stays null
+    // duration / bpm stay null
   } finally {
     unlink(tmpPath).catch(() => {});
   }
@@ -250,7 +253,7 @@ downloadRoute.post("/tracks/upload", async (c) => {
 
   const [userTrack] = await db
     .insert(userTracks)
-    .values({ userId, trackId: track.id })
+    .values({ userId, trackId: track.id, originalBpm })
     .returning();
 
   return c.json(
