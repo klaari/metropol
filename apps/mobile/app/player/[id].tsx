@@ -1,19 +1,22 @@
-import { tracks } from "@metropol/db";
+import { userTracks } from "@metropol/db";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Keyboard,
   type LayoutChangeEvent,
+  Modal,
+  PanResponder,
   Pressable,
-  type GestureResponderEvent,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
+import PlaylistPickerSheet from "../../components/PlaylistPickerSheet";
 import { getDb } from "../../lib/db";
 import { isNativeModuleAvailable, getTrackPlayer } from "../../lib/trackPlayer";
 import { usePlayerStore } from "../../store/player";
@@ -47,7 +50,27 @@ export default function PlayerScreen() {
   const [loading, setLoading] = useState(false);
   const [editingBpm, setEditingBpm] = useState(false);
   const [bpmInput, setBpmInput] = useState("");
+  const [pickerTrack, setPickerTrack] = useState<{ id: string; title: string } | null>(null);
+  const [kbHeight, setKbHeight] = useState(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener("keyboardDidShow", (e) =>
+      setKbHeight(e.endCoordinates.height),
+    );
+    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKbHeight(0));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
   const seekBarWidth = useRef(0);
+  const seekBarX = useRef(0);
+  const [dragSeconds, setDragSeconds] = useState<number | null>(null);
+  const dragSecondsRef = useRef<number | null>(null);
+  const durationRef = useRef(0);
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
 
   useEffect(() => {
     if (!id || !userId) return;
@@ -97,6 +120,39 @@ export default function PlayerScreen() {
     if (tp) await tp.seekTo(value);
   }
 
+  function setDrag(seconds: number | null) {
+    dragSecondsRef.current = seconds;
+    setDragSeconds(seconds);
+  }
+
+  function ratioFromPageX(pageX: number): number {
+    const w = seekBarWidth.current;
+    if (w <= 0) return 0;
+    return Math.max(0, Math.min(1, (pageX - seekBarX.current) / w));
+  }
+
+  const seekPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderGrant: (e) => {
+        const ratio = ratioFromPageX(e.nativeEvent.pageX);
+        setDrag(ratio * durationRef.current);
+      },
+      onPanResponderMove: (e) => {
+        const ratio = ratioFromPageX(e.nativeEvent.pageX);
+        setDrag(ratio * durationRef.current);
+      },
+      onPanResponderRelease: () => {
+        const target = dragSecondsRef.current;
+        if (target != null) handleSeek(target);
+        setDrag(null);
+      },
+      onPanResponderTerminate: () => setDrag(null),
+    }),
+  ).current;
+
   const [playDebug, setPlayDebug] = useState("");
   const dbgPlay = (msg: string) => {
     console.log("[player.toggle]", msg);
@@ -127,21 +183,34 @@ export default function PlayerScreen() {
     setEditingBpm(true);
   }
 
+  async function persistBpm(value: number | null) {
+    if (!currentTrack || !userId) return;
+    await getDb()
+      .update(userTracks)
+      .set({ originalBpm: value })
+      .where(
+        and(
+          eq(userTracks.userId, userId),
+          eq(userTracks.trackId, currentTrack.id),
+        ),
+      );
+    usePlayerStore.setState({
+      currentTrack: { ...currentTrack, originalBpm: value },
+    });
+  }
+
+  async function scaleBpm(factor: number) {
+    if (originalBpm == null) return;
+    const next = Math.round(originalBpm * factor * 10) / 10;
+    if (next < 30 || next > 300) return;
+    await persistBpm(next);
+  }
+
   async function saveBpm() {
     setEditingBpm(false);
-    if (!currentTrack) return;
-
     const parsed = bpmInput.trim() ? parseFloat(bpmInput.trim()) : null;
     if (parsed != null && (isNaN(parsed) || parsed <= 0)) return;
-
-    await getDb()
-      .update(tracks)
-      .set({ originalBpm: parsed })
-      .where(eq(tracks.id, currentTrack.id));
-
-    usePlayerStore.setState({
-      currentTrack: { ...currentTrack, originalBpm: parsed },
-    });
+    await persistBpm(parsed);
   }
 
   if (!isNativeModuleAvailable()) {
@@ -184,12 +253,22 @@ export default function PlayerScreen() {
         <Pressable onPress={() => router.back()} hitSlop={12}>
           <Text style={styles.backArrow}>‹</Text>
         </Pressable>
-        <Pressable
-          onPress={() => usePlayerStore.getState().setQueueSheetVisible(true)}
-          hitSlop={12}
-        >
-          <Ionicons name="list" size={26} color="#fff" />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            onPress={() => setPickerTrack({ id: currentTrack.id, title: currentTrack.title })}
+            hitSlop={12}
+            style={styles.headerBtn}
+          >
+            <Ionicons name="add-circle-outline" size={26} color="#fff" />
+          </Pressable>
+          <Pressable
+            onPress={() => usePlayerStore.getState().setQueueSheetVisible(true)}
+            hitSlop={12}
+            style={styles.headerBtn}
+          >
+            <Ionicons name="list" size={26} color="#fff" />
+          </Pressable>
+        </View>
       </View>
 
       {/* Track Info */}
@@ -202,33 +281,41 @@ export default function PlayerScreen() {
 
       {/* Seek Bar */}
       <View style={styles.seekSection}>
-        <Pressable
+        <View
           onLayout={(e: LayoutChangeEvent) => {
             seekBarWidth.current = e.nativeEvent.layout.width;
+            (e.target as any)?.measure?.(
+              (_x: number, _y: number, _w: number, _h: number, pageX: number) => {
+                if (typeof pageX === "number") seekBarX.current = pageX;
+              },
+            );
           }}
-          onPress={(e: GestureResponderEvent) => {
-            if (duration > 0 && seekBarWidth.current > 0) {
-              const ratio = e.nativeEvent.locationX / seekBarWidth.current;
-              handleSeek(ratio * duration);
-            }
-          }}
+          style={styles.seekHitArea}
+          {...seekPan.panHandlers}
         >
           <View style={styles.seekBarBg}>
-            <View
-              style={[
-                styles.seekBarFill,
-                {
-                  width:
-                    duration > 0
-                      ? `${(position / duration) * 100}%`
-                      : "0%",
-                },
-              ]}
-            />
+            {(() => {
+              const shown = dragSeconds != null ? dragSeconds : position;
+              const pct = duration > 0 ? Math.max(0, Math.min(100, (shown / duration) * 100)) : 0;
+              return (
+                <>
+                  <View style={[styles.seekBarFill, { width: `${pct}%` }]} />
+                  <View
+                    style={[
+                      styles.seekThumb,
+                      dragSeconds != null && styles.seekThumbActive,
+                      { left: `${pct}%` },
+                    ]}
+                  />
+                </>
+              );
+            })()}
           </View>
-        </Pressable>
+        </View>
         <View style={styles.timeRow}>
-          <Text style={styles.time}>{formatTime(position)}</Text>
+          <Text style={styles.time}>
+            {formatTime(dragSeconds != null ? dragSeconds : position)}
+          </Text>
           <Text style={styles.time}>{formatTime(duration)}</Text>
         </View>
       </View>
@@ -260,7 +347,19 @@ export default function PlayerScreen() {
 
       {/* Rate Control */}
       <View style={styles.rateSection}>
-        <Text style={styles.sectionLabel}>Speed</Text>
+        <View style={styles.rateHeader}>
+          <Text style={styles.sectionLabel}>Speed</Text>
+          {playbackRate !== 1 ? (
+            <Pressable
+              onPress={() => userId && setRate(1.0, userId)}
+              hitSlop={6}
+              style={styles.resetRateBtn}
+            >
+              <Ionicons name="refresh" size={14} color="#aaa" />
+              <Text style={styles.resetRateText}>Reset</Text>
+            </Pressable>
+          ) : null}
+        </View>
         <View style={styles.rateRow}>
           <Pressable style={styles.rateBtn} onPress={() => adjustRate(-0.005)}>
             <Text style={styles.rateBtnText}>-0.5%</Text>
@@ -272,49 +371,110 @@ export default function PlayerScreen() {
         </View>
       </View>
 
-      {/* Debug overlay */}
-      <View style={{ backgroundColor: "#1a0a00", borderRadius: 8, padding: 10, marginBottom: 16 }}>
-        <Text style={{ color: "#f80", fontSize: 11, fontFamily: "monospace" }}>
-          {debugInfo || "(no load debug)"}
-        </Text>
-        {playDebug ? (
-          <Text style={{ color: "#0f0", fontSize: 11, fontFamily: "monospace", marginTop: 4 }}>
-            play: {playDebug}
-          </Text>
-        ) : null}
-      </View>
-
       {/* BPM Display */}
       <View style={styles.bpmSection}>
-        <View style={styles.bpmRow}>
-          <Text style={styles.bpmLabel}>Original BPM</Text>
-          {editingBpm ? (
-            <View style={styles.bpmEditRow}>
-              <TextInput
-                style={styles.bpmInput}
-                value={bpmInput}
-                onChangeText={setBpmInput}
-                keyboardType="decimal-pad"
-                autoFocus
-                onSubmitEditing={saveBpm}
-                onBlur={saveBpm}
-              />
-            </View>
-          ) : (
-            <Pressable onPress={startBpmEdit}>
-              <Text style={styles.bpmValue}>
-                {originalBpm != null ? String(originalBpm) : "—"}
-              </Text>
-            </Pressable>
-          )}
-        </View>
         <View style={styles.bpmRow}>
           <Text style={styles.bpmLabel}>Current BPM</Text>
           <Text style={styles.bpmValue}>
             {currentBpm != null ? currentBpm.toFixed(1) : "—"}
           </Text>
         </View>
+        <View style={styles.bpmRow}>
+          <Text style={styles.bpmLabel}>Original BPM</Text>
+          <Pressable onPress={startBpmEdit} hitSlop={6}>
+            <Text style={styles.bpmValue}>
+              {originalBpm != null ? String(originalBpm) : "—"}
+            </Text>
+          </Pressable>
+        </View>
       </View>
+
+      {/* Debug overlay */}
+      <View style={styles.debugBox}>
+        <Text style={styles.debugLoad}>
+          {debugInfo || "(no load debug)"}
+        </Text>
+        {playDebug ? (
+          <Text style={styles.debugPlay}>
+            play: {playDebug}
+          </Text>
+        ) : null}
+      </View>
+
+      <Modal
+        visible={editingBpm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditingBpm(false)}
+      >
+        <Pressable style={styles.bpmBackdrop} onPress={() => setEditingBpm(false)} />
+        <View
+          pointerEvents="box-none"
+          style={[styles.bpmModalWrapper, { paddingBottom: kbHeight }]}
+        >
+          <View style={styles.bpmModal}>
+            <Text style={styles.bpmModalTitle}>Set BPM</Text>
+            <TextInput
+              style={styles.bpmModalInput}
+              value={bpmInput}
+              onChangeText={setBpmInput}
+              keyboardType="decimal-pad"
+              autoFocus
+              selectTextOnFocus
+              placeholder="128"
+              placeholderTextColor="#444"
+              onSubmitEditing={saveBpm}
+              returnKeyType="done"
+            />
+            <View style={styles.bpmScaleRow}>
+              <Pressable
+                style={styles.bpmScaleBtn}
+                onPress={() => {
+                  const cur = parseFloat(bpmInput);
+                  if (!isFinite(cur) || cur <= 0) return;
+                  setBpmInput(String(Math.round(cur * 0.5 * 10) / 10));
+                }}
+                hitSlop={6}
+              >
+                <Text style={styles.bpmScaleText}>÷2</Text>
+              </Pressable>
+              <Pressable
+                style={styles.bpmScaleBtn}
+                onPress={() => {
+                  const cur = parseFloat(bpmInput);
+                  if (!isFinite(cur) || cur <= 0) return;
+                  setBpmInput(String(Math.round(cur * 2 * 10) / 10));
+                }}
+                hitSlop={6}
+              >
+                <Text style={styles.bpmScaleText}>×2</Text>
+              </Pressable>
+            </View>
+            <View style={styles.bpmModalRow}>
+              <Pressable
+                style={styles.bpmModalCancel}
+                onPress={() => setEditingBpm(false)}
+                hitSlop={6}
+              >
+                <Text style={styles.bpmModalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.bpmModalSave}
+                onPress={saveBpm}
+                hitSlop={6}
+              >
+                <Text style={styles.bpmModalSaveText}>Save</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <PlaylistPickerSheet
+        visible={pickerTrack != null}
+        track={pickerTrack}
+        onClose={() => setPickerTrack(null)}
+      />
     </View>
   );
 }
@@ -334,6 +494,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  headerBtn: {
+    padding: 4,
   },
   backArrow: {
     color: "#fff",
@@ -371,21 +539,44 @@ const styles = StyleSheet.create({
   seekSection: {
     marginBottom: 32,
   },
+  seekHitArea: {
+    height: 32,
+    justifyContent: "center",
+  },
   seekBarBg: {
-    height: 4,
+    height: 6,
     backgroundColor: "#333",
-    borderRadius: 2,
-    overflow: "hidden",
+    borderRadius: 3,
+    justifyContent: "center",
   },
   seekBarFill: {
-    height: 4,
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
     backgroundColor: "#fff",
-    borderRadius: 2,
+    borderRadius: 3,
+  },
+  seekThumb: {
+    position: "absolute",
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#fff",
+    top: -4,
+    marginLeft: -7,
+  },
+  seekThumbActive: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    top: -6,
+    marginLeft: -9,
   },
   timeRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 8,
+    marginTop: 4,
   },
   time: {
     color: "#666",
@@ -422,12 +613,33 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 32,
   },
+  rateHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
   sectionLabel: {
     color: "#888",
     fontSize: 13,
-    marginBottom: 12,
     textTransform: "uppercase",
     letterSpacing: 1,
+  },
+  resetRateBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: "#1a1a1a",
+  },
+  resetRateText: {
+    color: "#aaa",
+    fontSize: 11,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.6,
   },
   rateRow: {
     flexDirection: "row",
@@ -479,6 +691,111 @@ const styles = StyleSheet.create({
   bpmEditRow: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  bpmScaleRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  bpmScaleBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#222",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#333",
+  },
+  bpmScaleText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+    minWidth: 28,
+    textAlign: "center",
+  },
+  debugBox: {
+    backgroundColor: "#1a0a00",
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 16,
+  },
+  debugLoad: {
+    color: "#f80",
+    fontSize: 11,
+    fontFamily: "monospace",
+  },
+  debugPlay: {
+    color: "#0f0",
+    fontSize: 11,
+    fontFamily: "monospace",
+    marginTop: 4,
+  },
+  bpmBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.65)",
+  },
+  bpmModalWrapper: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 28,
+  },
+  bpmModal: {
+    width: "100%",
+    maxWidth: 360,
+    backgroundColor: "#161616",
+    borderRadius: 16,
+    paddingTop: 24,
+    paddingBottom: 12,
+    paddingHorizontal: 20,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#2a2a2a",
+  },
+  bpmModalTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 18,
+  },
+  bpmModalInput: {
+    backgroundColor: "transparent",
+    borderBottomWidth: 2,
+    borderBottomColor: "#fff",
+    paddingHorizontal: 0,
+    paddingVertical: 6,
+    fontSize: 42,
+    fontWeight: "300",
+    color: "#fff",
+    textAlign: "center",
+    fontVariant: ["tabular-nums"],
+    marginBottom: 8,
+  },
+  bpmModalRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
+    gap: 4,
+    marginTop: 8,
+  },
+  bpmModalCancel: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  bpmModalCancelText: {
+    color: "#888",
+    fontSize: 15,
+    fontWeight: "500",
+  },
+  bpmModalSave: {
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  bpmModalSaveText: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "700",
   },
   bpmInput: {
     backgroundColor: "#1a1a1a",

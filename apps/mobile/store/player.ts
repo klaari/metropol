@@ -247,6 +247,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     await tp.add(rntpTracks);
     if (idx > 0) await tp.skip(idx);
 
+    // Restore the user's saved rate for this track but always start playback
+    // from the beginning — saved positions are stale once another track has
+    // been played in between. (Cold-start resume still works via initQueue.)
     const [saved] = await getDb()
       .select()
       .from(playbackState)
@@ -257,9 +260,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         ),
       );
     const rate = saved?.playbackRate ?? 1.0;
-    const pos = saved?.lastPosition ?? 0;
     await tp.setRate(rate);
-    if (pos > 0) await tp.seekTo(pos);
     await tp.play();
 
     set({

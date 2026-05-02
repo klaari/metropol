@@ -349,7 +349,6 @@ export default function LibraryScreen() {
                     Math.max(0, idx),
                     userId,
                   );
-                router.push(`/player/${item.id}`);
               }}
               onLongPress={() => showTrackActions(item)}
             />

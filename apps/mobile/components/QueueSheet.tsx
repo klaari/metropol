@@ -2,17 +2,11 @@ import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Alert,
-  FlatList,
-  Keyboard,
   Modal,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
-  ToastAndroid,
   View,
 } from "react-native";
 import DraggableFlatList, {
@@ -26,7 +20,7 @@ import {
 } from "react-native-gesture-handler";
 import { getTrackPlayer } from "../lib/trackPlayer";
 import { type QueueItem, usePlayerStore } from "../store/player";
-import { usePlaylistsStore } from "../store/playlists";
+import PlaylistPickerSheet from "./PlaylistPickerSheet";
 
 export default function QueueSheet() {
   const { userId } = useAuth();
@@ -39,27 +33,6 @@ export default function QueueSheet() {
   const removeAt = usePlayerStore((s) => s.removeAt);
   const reorder = usePlayerStore((s) => s.reorder);
 
-  const playlists = usePlaylistsStore((s) => s.playlists);
-  const fetchPlaylists = usePlaylistsStore((s) => s.fetchPlaylists);
-  const addTracksToPlaylist = usePlaylistsStore((s) => s.addTracksToPlaylist);
-  const createPlaylist = usePlaylistsStore((s) => s.createPlaylist);
-
-  const [newPlaylistName, setNewPlaylistName] = useState("");
-  const [creatingPlaylist, setCreatingPlaylist] = useState(false);
-  const [showCreateInput, setShowCreateInput] = useState(false);
-  const [kbHeight, setKbHeight] = useState(0);
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardDidShow", (e) =>
-      setKbHeight(e.endCoordinates.height),
-    );
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKbHeight(0));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
   const listRef = useRef<any>(null);
   const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
   const [pickerTrack, setPickerTrack] = useState<{ id: string; title: string } | null>(null);
@@ -68,7 +41,6 @@ export default function QueueSheet() {
 
   useEffect(() => {
     if (!visible) return;
-    if (userId) fetchPlaylists(userId);
     const idx = usePlayerStore.getState().currentIndex;
     if (idx < 0) return;
     const t = setTimeout(() => {
@@ -81,7 +53,7 @@ export default function QueueSheet() {
       }
     }, 50);
     return () => clearTimeout(t);
-  }, [visible, userId, fetchPlaylists]);
+  }, [visible]);
 
   const togglePlayPause = useCallback(async () => {
     const tp = getTrackPlayer();
@@ -235,46 +207,7 @@ export default function QueueSheet() {
       ? "Queue is empty"
       : `${playedCount} played · ${upcomingCount} upcoming`;
 
-  function closePicker() {
-    setPickerTrack(null);
-    setNewPlaylistName("");
-    setShowCreateInput(false);
-  }
-
-  async function handlePickPlaylist(playlistId: string, playlistName: string) {
-    if (!pickerTrack) return;
-    const track = pickerTrack;
-    closePicker();
-    try {
-      const added = await addTracksToPlaylist(playlistId, [track.id]);
-      const msg =
-        added > 0
-          ? `Added to ${playlistName}`
-          : `Already in ${playlistName}`;
-      if (Platform.OS === "android") {
-        ToastAndroid.show(msg, ToastAndroid.SHORT);
-      }
-    } catch (e: any) {
-      Alert.alert("Couldn't add to playlist", e?.message ?? "Unknown error");
-    }
-  }
-
-  async function handleCreateAndAdd() {
-    const name = newPlaylistName.trim();
-    if (!name || !userId || !pickerTrack) return;
-    setCreatingPlaylist(true);
-    try {
-      await createPlaylist(userId, name);
-      const created = usePlaylistsStore.getState().playlists.find(
-        (p) => p.name === name,
-      );
-      if (created) {
-        await handlePickPlaylist(created.id, created.name);
-      }
-    } finally {
-      setCreatingPlaylist(false);
-    }
-  }
+  const closePicker = useCallback(() => setPickerTrack(null), []);
 
   return (
     <Modal
@@ -312,88 +245,12 @@ export default function QueueSheet() {
           )}
         </View>
 
-        <Modal
-          visible={pickerTrack != null}
-          animationType="fade"
-          transparent
-          onRequestClose={closePicker}
-        >
-          <Pressable style={styles.backdrop} onPress={closePicker} />
-          <View style={[styles.pickerSheet, { bottom: kbHeight }]}>
-            <View style={styles.handle} />
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Add to playlist</Text>
-              <Pressable onPress={closePicker} hitSlop={10}>
-                <Ionicons name="close" size={24} color="#fff" />
-              </Pressable>
-            </View>
-
-            <FlatList
-              data={playlists}
-              keyExtractor={(p) => p.id}
-              ListHeaderComponent={
-                showCreateInput ? (
-                  <View style={styles.newPlaylistRow}>
-                    <TextInput
-                      style={styles.newPlaylistInput}
-                      value={newPlaylistName}
-                      onChangeText={setNewPlaylistName}
-                      placeholder="New playlist name…"
-                      placeholderTextColor="#666"
-                      returnKeyType="done"
-                      autoFocus
-                      onSubmitEditing={handleCreateAndAdd}
-                    />
-                    <Pressable
-                      style={[
-                        styles.newPlaylistButton,
-                        (!newPlaylistName.trim() || creatingPlaylist) &&
-                          styles.newPlaylistButtonDisabled,
-                      ]}
-                      onPress={handleCreateAndAdd}
-                      disabled={!newPlaylistName.trim() || creatingPlaylist}
-                    >
-                      {creatingPlaylist ? (
-                        <ActivityIndicator color="#000" size="small" />
-                      ) : (
-                        <Text style={styles.newPlaylistButtonText}>Create</Text>
-                      )}
-                    </Pressable>
-                  </View>
-                ) : (
-                  <Pressable
-                    style={styles.createNewRow}
-                    onPress={() => setShowCreateInput(true)}
-                    android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                  >
-                    <Ionicons name="add" size={22} color="#fff" />
-                    <Text style={styles.createNewText}>Create new playlist</Text>
-                  </Pressable>
-                )
-              }
-              ListEmptyComponent={
-                showCreateInput ? null : (
-                  <Text style={styles.emptyText}>
-                    No playlists yet — tap "Create new playlist" above.
-                  </Text>
-                )
-              }
-              renderItem={({ item: pl }) => (
-                <Pressable
-                  style={styles.pickerRow}
-                  onPress={() => handlePickPlaylist(pl.id, pl.name)}
-                  android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-                >
-                  <Text style={styles.pickerRowText}>{pl.name}</Text>
-                  <Text style={styles.pickerRowCount}>
-                    {pl.trackCount} {pl.trackCount === 1 ? "track" : "tracks"}
-                  </Text>
-                </Pressable>
-              )}
-            />
-          </View>
-        </Modal>
       </GestureHandlerRootView>
+      <PlaylistPickerSheet
+        visible={pickerTrack != null}
+        track={pickerTrack}
+        onClose={closePicker}
+      />
     </Modal>
   );
 }

@@ -62,7 +62,6 @@ export default function PlaylistDetailScreen() {
           userId,
         );
     }
-    router.push(`/player/${trackId}`);
   }
 
   async function handleRemove(item: PlaylistTrackItem) {
