@@ -1,6 +1,6 @@
 import { playbackState, queueItems, tracks, userPlayerState, userTracks } from "@metropol/db";
 import type { Track } from "@metropol/types";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, and, asc, inArray } from "drizzle-orm";
 import { create } from "zustand";
 import { getDb } from "../lib/db";
 import { ensureLocalCopy, hasLocalCopy } from "../lib/localAudio";
@@ -27,6 +27,7 @@ interface PlayerState {
   queueSheetVisible: boolean;
 
   initQueue: (userId: string) => Promise<void>;
+  togglePlayPause: () => Promise<void>;
   playWithQueue: (trackIds: string[], startIndex: number, userId: string) => Promise<void>;
   addToQueue: (trackId: string, userId: string) => Promise<void>;
   playNext: (trackId: string, userId: string) => Promise<void>;
@@ -45,6 +46,11 @@ interface PlayerState {
 
 let pollInterval: ReturnType<typeof setInterval> | null = null;
 
+// `playing` in the store is intent-driven: it reflects whether the user
+// has asked playback to be active, not what RNTP momentarily reports.
+// We set it true on user actions (playWithQueue / skipToIndex / play
+// toggle) and false on pause / queue-ended / playback-error events.
+// Polling only updates the seekbar values (position / duration).
 function startPolling() {
   if (pollInterval) return;
   pollInterval = setInterval(async () => {
@@ -52,11 +58,9 @@ function startPolling() {
     if (!tp) return;
     try {
       const progress = await tp.getProgress();
-      const state = await tp.getPlaybackState();
       usePlayerStore.setState({
         position: progress.position,
         duration: progress.duration,
-        playing: state.state === "playing",
       });
     } catch {
       // Player not ready yet — try again next tick
@@ -104,7 +108,9 @@ async function fetchTracks(trackIds: string[], userId: string): Promise<Track[]>
     })
     .from(userTracks)
     .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
-    .where(eq(userTracks.userId, userId));
+    .where(
+      and(eq(userTracks.userId, userId), inArray(tracks.id, trackIds)),
+    );
 
   const byId = new Map<string, Track>(rows.map((r) => [r.id, r as Track]));
   return trackIds.map((id) => byId.get(id)).filter((t): t is Track => t != null);
@@ -233,6 +239,24 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
+  togglePlayPause: async () => {
+    const tp = getTrackPlayer();
+    if (!tp) return;
+    const { playing } = get();
+    if (playing) {
+      set({ playing: false });
+      try { await tp.pause(); } catch (e: any) { console.warn("[player.toggle] pause:", e?.message ?? e); }
+    } else {
+      set({ playing: true });
+      try {
+        await tp.play();
+      } catch (e: any) {
+        console.warn("[player.toggle] play:", e?.message ?? e);
+        set({ playing: false });
+      }
+    }
+  },
+
   playWithQueue: async (trackIds, startIndex, userId) => {
     if (trackIds.length === 0) return;
     const fetched = await fetchTracks(trackIds, userId);
@@ -240,41 +264,70 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     const queue: QueueItem[] = fetched.map((t) => ({ trackId: t.id, track: t }));
     const idx = Math.max(0, Math.min(queue.length - 1, startIndex));
 
+    // Set play intent immediately so the mini-player snaps to the new
+    // track and the icon shows "pause" while RNTP is still loading.
+    set({
+      queue,
+      currentIndex: idx,
+      currentTrack: queue[idx]!.track,
+      playing: true,
+      position: 0,
+      duration: queue[idx]!.track.duration ?? 0,
+    });
+    schedulePersist(userId);
+
     const tp = getTrackPlayer();
-    if (!tp) {
-      set({ queue, currentIndex: idx, currentTrack: queue[idx]!.track });
-      schedulePersist(userId);
-      return;
-    }
+    if (!tp) return;
 
-    const rntpTracks = await Promise.all(queue.map((q) => buildRntpTrack(q.track)));
+    const startTrack = queue[idx]!;
+    const rntpStart = await buildRntpTrack(startTrack.track);
+
+    // Hot path: reset the queue, add ONLY the starting track, kick off play.
+    // Saves us from waiting on URL-signing / file-existence checks for the
+    // rest of the queue before audio starts.
     await tp.reset();
-    await tp.add(rntpTracks);
-    if (idx > 0) await tp.skip(idx);
+    await tp.add(rntpStart);
+    void tp.play();
 
-    // Restore the user's saved rate for this track but always start playback
-    // from the beginning — saved positions are stale once another track has
-    // been played in between. (Cold-start resume still works via initQueue.)
-    const [saved] = await getDb()
+    // Apply the user's saved rate for this track in parallel.
+    void getDb()
       .select()
       .from(playbackState)
       .where(
         and(
           eq(playbackState.userId, userId),
-          eq(playbackState.trackId, queue[idx]!.trackId),
+          eq(playbackState.trackId, startTrack.trackId),
         ),
-      );
-    const rate = saved?.playbackRate ?? 1.0;
-    await tp.setRate(rate);
-    await tp.play();
+      )
+      .then(([saved]) => {
+        const rate = saved?.playbackRate ?? 1.0;
+        if (rate !== 1) tp.setRate(rate).catch(() => {});
+        set({ playbackRate: rate });
+      })
+      .catch(() => {});
 
-    set({
-      queue,
-      currentIndex: idx,
-      currentTrack: queue[idx]!.track,
-      playbackRate: rate,
+    // Cold path: build the rest of the RNTP queue in the background so
+    // auto-advance still works without blocking time-to-first-audio.
+    queueMicrotask(async () => {
+      try {
+        const before = queue.slice(0, idx);
+        const after = queue.slice(idx + 1);
+        if (before.length > 0) {
+          const rntpBefore = await Promise.all(
+            before.map((q) => buildRntpTrack(q.track)),
+          );
+          await tp.add(rntpBefore, 0);
+        }
+        if (after.length > 0) {
+          const rntpAfter = await Promise.all(
+            after.map((q) => buildRntpTrack(q.track)),
+          );
+          await tp.add(rntpAfter);
+        }
+      } catch (e: any) {
+        console.warn("[player.playWithQueue] background fill:", e?.message ?? e);
+      }
     });
-    schedulePersist(userId);
   },
 
   addToQueue: async (trackId, userId) => {
@@ -341,16 +394,22 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (index < 0 || index >= queue.length) return;
     const tp = getTrackPlayer();
 
+    set({
+      currentIndex: index,
+      currentTrack: queue[index]!.track,
+      playing: true,
+      position: 0,
+      duration: queue[index]!.track.duration ?? 0,
+    });
+
     if (tp) {
       try {
         await tp.skip(index);
-        await tp.play();
+        void tp.play();
       } catch (e: any) {
         console.warn("[player.skipToIndex]", e?.message ?? e);
       }
     }
-
-    set({ currentIndex: index, currentTrack: queue[index]!.track });
     schedulePersist(userId);
   },
 

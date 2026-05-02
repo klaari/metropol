@@ -159,23 +159,12 @@ export default function PlayerScreen() {
     setPlayDebug(msg);
   };
 
-  async function togglePlayPause() {
-    const tp = getTrackPlayer();
-    if (!tp) { dbgPlay("no tp instance"); return; }
-    try {
-      if (playing) {
-        await tp.pause();
-        if (userId) savePosition(userId);
-        dbgPlay("paused");
-      } else {
-        dbgPlay("calling play...");
-        await tp.play();
-        const st = await tp.getPlaybackState();
-        dbgPlay(`play() done, state=${JSON.stringify(st)}`);
-      }
-    } catch (e: any) {
-      dbgPlay(`ERROR: ${e?.message ?? e}`);
-    }
+  const togglePlayPause = usePlayerStore((s) => s.togglePlayPause);
+
+  async function handleTogglePlayPause() {
+    const wasPlaying = usePlayerStore.getState().playing;
+    await togglePlayPause();
+    if (wasPlaying && userId) savePosition(userId);
   }
 
   function startBpmEdit() {
@@ -331,7 +320,7 @@ export default function PlayerScreen() {
 
         <Pressable
           style={styles.playBtn}
-          onPress={togglePlayPause}
+          onPress={handleTogglePlayPause}
           hitSlop={12}
         >
           <Ionicons name={playing ? "pause" : "play"} size={44} color="#000" />

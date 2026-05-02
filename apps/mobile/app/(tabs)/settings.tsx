@@ -232,37 +232,35 @@ export default function SettingsScreen() {
         <Text style={styles.sectionTitle}>Local audio</Text>
         <Text style={styles.description}>
           Tracks are downloaded to this device so playback starts instantly.
-          New tracks download in the background; tap below to force a refresh
-          or clear the cache.
+          New tracks download in the background.
         </Text>
         <View style={styles.statusRow}>
           <Text style={styles.statusLabel}>Used:</Text>
           <Text style={styles.statusLoaded}>{formatBytes(cacheBytes)}</Text>
         </View>
-        <View style={{ flexDirection: "row", gap: 10 }}>
-          <Pressable
-            style={[styles.checkButton, { flex: 1 }, downloading && styles.buttonDisabled]}
-            onPress={handleDownloadAll}
-            disabled={downloading}
-          >
-            {downloading ? (
-              <ActivityIndicator color="#000" size="small" />
-            ) : (
-              <Text style={styles.checkButtonText}>Download all</Text>
-            )}
-          </Pressable>
-          <Pressable
-            style={[styles.checkButton, { flex: 1, backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#333" }, clearing && styles.buttonDisabled]}
-            onPress={handleClearCache}
-            disabled={clearing}
-          >
-            {clearing ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={[styles.checkButtonText, { color: "#fff" }]}>Clear cache</Text>
-            )}
-          </Pressable>
-        </View>
+        <Pressable
+          style={[styles.smallButton, downloading && styles.buttonDisabled]}
+          onPress={handleDownloadAll}
+          disabled={downloading}
+        >
+          {downloading ? (
+            <ActivityIndicator color="#000" size="small" />
+          ) : (
+            <Text style={styles.smallButtonText}>Download all</Text>
+          )}
+        </Pressable>
+        <Pressable
+          onPress={handleClearCache}
+          disabled={clearing}
+          hitSlop={6}
+          style={styles.linkBtn}
+        >
+          {clearing ? (
+            <ActivityIndicator color="#666" size="small" />
+          ) : (
+            <Text style={styles.linkBtnText}>Clear cache</Text>
+          )}
+        </Pressable>
       </View>
 
       {/* App Updates */}
@@ -277,11 +275,11 @@ export default function SettingsScreen() {
         <Text style={styles.versionLine}>
           Channel: {Updates.channel || "—"}
         </Text>
-        <Pressable style={styles.checkButton} onPress={checkForUpdate}>
+        <Pressable style={styles.smallButton} onPress={checkForUpdate}>
           {checking ? (
             <ActivityIndicator color="#000" size="small" />
           ) : (
-            <Text style={styles.checkButtonText}>Check for updates</Text>
+            <Text style={styles.smallButtonText}>Check for updates</Text>
           )}
         </Pressable>
         {updateMessage && (
@@ -394,6 +392,30 @@ const styles = StyleSheet.create({
     color: "#000",
     fontSize: 15,
     fontWeight: "600",
+  },
+  smallButton: {
+    alignSelf: "flex-start",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    marginTop: 8,
+  },
+  smallButtonText: {
+    color: "#000",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  linkBtn: {
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    marginTop: 4,
+  },
+  linkBtnText: {
+    color: "#888",
+    fontSize: 13,
+    textDecorationLine: "underline",
   },
   signOutButton: {
     borderWidth: 1,

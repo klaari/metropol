@@ -18,7 +18,6 @@ import {
   Swipeable,
   TouchableOpacity,
 } from "react-native-gesture-handler";
-import { getTrackPlayer } from "../lib/trackPlayer";
 import { type QueueItem, usePlayerStore } from "../store/player";
 import PlaylistPickerSheet from "./PlaylistPickerSheet";
 
@@ -55,16 +54,7 @@ export default function QueueSheet() {
     return () => clearTimeout(t);
   }, [visible]);
 
-  const togglePlayPause = useCallback(async () => {
-    const tp = getTrackPlayer();
-    if (!tp) return;
-    try {
-      if (playing) await tp.pause();
-      else await tp.play();
-    } catch {
-      // ignore
-    }
-  }, [playing]);
+  const togglePlayPause = usePlayerStore((s) => s.togglePlayPause);
 
   const showRowMenu = useCallback(
     (trackId: string, title: string, idx: number, isCurrent: boolean) => {

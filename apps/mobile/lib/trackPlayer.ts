@@ -116,10 +116,18 @@ export function attachQueueListeners(): () => void {
     const sub2 = TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
       usePlayerStore.getState().onQueueEnded();
     });
+    const sub3 = TrackPlayer.addEventListener(
+      Event.PlaybackError,
+      (e: { code?: string; message?: string }) => {
+        console.warn("[player.error]", e?.code, e?.message);
+        usePlayerStore.setState({ playing: false });
+      },
+    );
 
     return () => {
       sub1?.remove?.();
       sub2?.remove?.();
+      sub3?.remove?.();
     };
   } catch {
     return () => {};
