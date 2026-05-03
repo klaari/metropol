@@ -16,8 +16,9 @@
 //   bun apps/api/scripts/migrate-content-hash.ts --apply    # actually write
 //
 // Required env (read from .env at repo root):
-//   R2_ENDPOINT          https://<account>.r2.cloudflarestorage.com  (NO bucket suffix!)
-//   R2_ACCESS_KEY, R2_SECRET_KEY
+//   R2_ACCOUNT_ENDPOINT  https://<account>.r2.cloudflarestorage.com  (bare account endpoint,
+//                        NOT the runtime R2_ENDPOINT which still has the bucket suffix)
+//   R2_ACCESS_KEY, R2_SECRET_KEY (reused from runtime)
 //   R2_OLD_BUCKET        metropol-player
 //   R2_NEW_BUCKET        aani-player
 //   R2_OLD_KEY_PREFIX    metropol-player/        (the doubled prefix; trailing slash)
@@ -43,7 +44,7 @@ function required(name: string): string {
 }
 
 const cfg = {
-  endpoint: required("R2_ENDPOINT"),
+  endpoint: required("R2_ACCOUNT_ENDPOINT"),
   accessKey: required("R2_ACCESS_KEY"),
   secretKey: required("R2_SECRET_KEY"),
   oldBucket: required("R2_OLD_BUCKET"),
@@ -54,7 +55,7 @@ const cfg = {
 
 if (cfg.endpoint.includes(`/${cfg.oldBucket}`) || cfg.endpoint.includes(`/${cfg.newBucket}`)) {
   throw new Error(
-    `R2_ENDPOINT must NOT contain a bucket suffix — got "${cfg.endpoint}". ` +
+    `R2_ACCOUNT_ENDPOINT must NOT contain a bucket suffix — got "${cfg.endpoint}". ` +
       `Use the bare account endpoint, e.g. https://<id>.r2.cloudflarestorage.com`,
   );
 }
