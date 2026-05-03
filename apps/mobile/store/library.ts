@@ -57,7 +57,9 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       const rows = await getDb()
         .select({
           id: tracks.id,
-          youtubeId: tracks.youtubeId,
+          source: tracks.source,
+          sourceId: tracks.sourceId,
+          contentHash: tracks.contentHash,
           title: tracks.title,
           artist: tracks.artist,
           duration: tracks.duration,
@@ -74,7 +76,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
         .where(eq(userTracks.userId, userId))
         .orderBy(desc(userTracks.addedAt));
-      set({ tracks: rows as LibraryTrack[], isLoading: false });
+      set({ tracks: rows as unknown as LibraryTrack[], isLoading: false });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Failed to load tracks",

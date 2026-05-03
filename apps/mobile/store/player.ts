@@ -94,7 +94,9 @@ async function fetchTracks(trackIds: string[], userId: string): Promise<Track[]>
   const rows = await getDb()
     .select({
       id: tracks.id,
-      youtubeId: tracks.youtubeId,
+      source: tracks.source,
+      sourceId: tracks.sourceId,
+      contentHash: tracks.contentHash,
       title: tracks.title,
       artist: tracks.artist,
       duration: tracks.duration,
@@ -112,12 +114,12 @@ async function fetchTracks(trackIds: string[], userId: string): Promise<Track[]>
       and(eq(userTracks.userId, userId), inArray(tracks.id, trackIds)),
     );
 
-  const byId = new Map<string, Track>(rows.map((r) => [r.id, r as Track]));
+  const byId = new Map<string, Track>(rows.map((r) => [r.id, r as unknown as Track]));
   return trackIds.map((id) => byId.get(id)).filter((t): t is Track => t != null);
 }
 
 async function buildRntpTrack(track: Track) {
-  const localUri = (track as any).localUri as string | undefined;
+  const localUri = track.localUri ?? undefined;
   const url = localUri && hasLocalCopy(localUri)
     ? localUri
     : await getDownloadUrl(track.fileKey);

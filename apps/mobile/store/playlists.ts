@@ -1,4 +1,4 @@
-import { playlists, playlistTracks, tracks } from "@aani/db";
+import { playlists, playlistTracks, tracks, userTracks } from "@aani/db";
 import type { Playlist, Track } from "@aani/types";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { create } from "zustand";
@@ -111,23 +111,27 @@ export const usePlaylistsStore = create<PlaylistsState>((set, get) => ({
         playlistTrackId: playlistTracks.id,
         position: playlistTracks.position,
         id: tracks.id,
-        userId: tracks.userId,
+        source: tracks.source,
+        sourceId: tracks.sourceId,
+        contentHash: tracks.contentHash,
         title: tracks.title,
         artist: tracks.artist,
         duration: tracks.duration,
-        originalBpm: tracks.originalBpm,
         fileKey: tracks.fileKey,
         fileSize: tracks.fileSize,
         format: tracks.format,
-        importedAt: tracks.importedAt,
-        lastPlayedAt: tracks.lastPlayedAt,
+        sourceUrl: tracks.sourceUrl,
+        downloadedAt: tracks.downloadedAt,
+        originalBpm: userTracks.originalBpm,
+        localUri: userTracks.localUri,
       })
       .from(playlistTracks)
       .innerJoin(tracks, eq(playlistTracks.trackId, tracks.id))
+      .leftJoin(userTracks, eq(userTracks.trackId, tracks.id))
       .where(eq(playlistTracks.playlistId, playlistId))
       .orderBy(asc(playlistTracks.position));
 
-    return rows as (Track & { playlistTrackId: string; position: number })[];
+    return rows as unknown as (Track & { playlistTrackId: string; position: number })[];
   },
 
   addTracksToPlaylist: async (playlistId, trackIds) => {

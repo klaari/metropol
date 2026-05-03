@@ -1,5 +1,6 @@
 import { rm } from "node:fs/promises";
-import { eq } from "drizzle-orm";
+import { createHash } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { createDb } from "@aani/db";
 import { downloadJobs, tracks, userTracks } from "@aani/db";
 import type { WsJobStatusMessage, DownloadJobStatus } from "@aani/types";
@@ -83,41 +84,69 @@ async function processJob(job: QueueJob) {
     const result = await downloadAudio(url, ytOpts);
     cleanupDir = result.cleanupDir;
 
-    // Step 6: Upload to R2 (global path — no userId prefix)
-    await updateJobStatus(jobId, { status: "uploading" });
-    broadcast(userId, buildStatusMessage(jobId, "uploading", {
-      title: meta.title,
-      artist: meta.artist,
-      duration: meta.duration,
-    }));
-
-    const trackId = crypto.randomUUID();
-    fileKey = `tracks/${trackId}.m4a`;
-    const fileData = await Bun.file(result.filePath).arrayBuffer();
-    await uploadToR2(fileKey, new Uint8Array(fileData), "audio/mp4");
-
-    const originalBpm = await detectBpm(result.filePath);
-    if (originalBpm != null) {
-      console.log(`[processor] BPM detected for ${trackId}: ${originalBpm}`);
-    }
-
-    // Step 7: Insert into global tracks table (no userId)
     if (!youtubeId) {
       throw new Error("youtubeId missing from job — cannot insert global track");
     }
-    await db.insert(tracks).values({
-      id: trackId,
-      youtubeId,
-      title: meta.title,
-      artist: meta.artist,
-      duration: meta.duration,
-      fileKey,
-      fileSize: fileData.byteLength,
-      format: "m4a",
-      sourceUrl: url,
-    });
 
-    // Step 8: Link track to user in user_tracks
+    const fileData = await Bun.file(result.filePath).arrayBuffer();
+    const fileBuf = new Uint8Array(fileData);
+    const contentHash = createHash("sha256").update(fileBuf).digest("hex");
+
+    // Step 6: contentHash dedup — same audio bytes already uploaded
+    // (e.g. user previously uploaded this file directly, or same audio
+    // was downloaded under a different YouTube id)
+    const [dupe] = await db
+      .select()
+      .from(tracks)
+      .where(eq(tracks.contentHash, contentHash));
+
+    let trackId: string;
+    let originalBpm: number | null = null;
+
+    if (dupe) {
+      console.log(`[processor] contentHash dedup hit: ${contentHash} → reusing track ${dupe.id}`);
+      trackId = dupe.id;
+      // Backfill source/sourceId if dupe was previously source='upload' with no sourceId
+      if (!dupe.sourceId) {
+        await db
+          .update(tracks)
+          .set({ source: "youtube", sourceId: youtubeId, sourceUrl: url })
+          .where(eq(tracks.id, dupe.id));
+      }
+    } else {
+      // Step 7: Upload + insert
+      await updateJobStatus(jobId, { status: "uploading" });
+      broadcast(userId, buildStatusMessage(jobId, "uploading", {
+        title: meta.title,
+        artist: meta.artist,
+        duration: meta.duration,
+      }));
+
+      trackId = crypto.randomUUID();
+      fileKey = `tracks/${contentHash}.m4a`;
+      await uploadToR2(fileKey, fileBuf, "audio/mp4");
+
+      originalBpm = await detectBpm(result.filePath);
+      if (originalBpm != null) {
+        console.log(`[processor] BPM detected for ${trackId}: ${originalBpm}`);
+      }
+
+      await db.insert(tracks).values({
+        id: trackId,
+        source: "youtube",
+        sourceId: youtubeId,
+        contentHash,
+        title: meta.title,
+        artist: meta.artist,
+        duration: meta.duration,
+        fileKey,
+        fileSize: fileData.byteLength,
+        format: "m4a",
+        sourceUrl: url,
+      });
+    }
+
+    // Step 8: Link track to user
     await db
       .insert(userTracks)
       .values({ userId, trackId, originalBpm })

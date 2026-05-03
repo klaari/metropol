@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   uuid,
@@ -9,18 +10,28 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
-export const tracks = pgTable("tracks", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  youtubeId: text("youtube_id").unique().notNull(),
-  title: text("title").notNull(),
-  artist: text("artist"),
-  duration: integer("duration"),
-  fileKey: text("file_key").notNull(),
-  fileSize: integer("file_size"),
-  format: text("format"),
-  sourceUrl: text("source_url"),
-  downloadedAt: timestamp("downloaded_at").defaultNow().notNull(),
-});
+export const tracks = pgTable(
+  "tracks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    source: text("source").notNull(),
+    sourceId: text("source_id"),
+    contentHash: text("content_hash").notNull().unique(),
+    title: text("title").notNull(),
+    artist: text("artist"),
+    duration: integer("duration"),
+    fileKey: text("file_key").notNull(),
+    fileSize: integer("file_size"),
+    format: text("format"),
+    sourceUrl: text("source_url"),
+    downloadedAt: timestamp("downloaded_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("tracks_source_source_id_idx")
+      .on(t.source, t.sourceId)
+      .where(sql`${t.sourceId} IS NOT NULL`),
+  ],
+);
 
 export const userTracks = pgTable(
   "user_tracks",

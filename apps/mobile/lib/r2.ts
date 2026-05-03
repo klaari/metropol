@@ -48,11 +48,7 @@ export async function deleteObject(fileKey: string): Promise<void> {
   await client.send(command);
 }
 
-/** Build the R2 object key for a track: {userId}/{trackId}.{ext} */
-export function buildFileKey(
-  userId: string,
-  trackId: string,
-  ext: string,
-): string {
-  return `${userId}/${trackId}.${ext}`;
+/** Build the R2 object key for a track: tracks/{contentHash}.{ext} */
+export function buildContentKey(contentHash: string, ext: string): string {
+  return `tracks/${contentHash}.${ext}`;
 }

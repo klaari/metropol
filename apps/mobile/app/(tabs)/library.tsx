@@ -1,12 +1,15 @@
-import { tracks } from "@aani/db";
+import { tracks, userTracks } from "@aani/db";
 import type { LibraryTrack, Track } from "@aani/types";
 import { useAuth } from "@clerk/clerk-expo";
+import { and, eq } from "drizzle-orm";
 import * as DocumentPicker from "expo-document-picker";
 import {
+  EncodingType,
+  readAsStringAsync,
   uploadAsync,
   FileSystemUploadType,
 } from "expo-file-system/legacy";
-import { randomUUID } from "expo-crypto";
+import * as Crypto from "expo-crypto";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useMemo, useState } from "react";
 import {
@@ -26,7 +29,7 @@ import {
 import EditTrackModal from "../../components/EditTrackModal";
 import TrackItem from "../../components/TrackItem";
 import { getDb } from "../../lib/db";
-import { buildFileKey, getUploadUrl } from "../../lib/r2";
+import { buildContentKey, getUploadUrl } from "../../lib/r2";
 import { ensureLocalCopy } from "../../lib/localAudio";
 import { type SortOption, useLibraryStore } from "../../store/library";
 import { usePlayerStore } from "../../store/player";
@@ -45,6 +48,28 @@ const AUDIO_TYPES = [
 function extFromName(name: string): string {
   const parts = name.split(".");
   return parts.length > 1 ? parts.pop()!.toLowerCase() : "mp3";
+}
+
+function base64ToBytes(b64: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(b64);
+  const len = binary.length;
+  const bytes = new Uint8Array(new ArrayBuffer(len));
+  for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function bytesToHex(buf: ArrayBuffer | Uint8Array): string {
+  const arr = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+  let hex = "";
+  for (let i = 0; i < arr.length; i++) hex += arr[i]!.toString(16).padStart(2, "0");
+  return hex;
+}
+
+async function sha256OfFile(uri: string): Promise<string> {
+  const b64 = await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
+  const bytes = base64ToBytes(b64);
+  const hashBuf = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
+  return bytesToHex(hashBuf);
 }
 
 function contentTypeFromExt(ext: string): string {
@@ -113,43 +138,81 @@ export default function LibraryScreen() {
 
     const file = result.assets[0]!;
     const ext = extFromName(file.name);
-    const trackId = randomUUID();
-    const fileKey = buildFileKey(userId, trackId, ext);
     const contentType = contentTypeFromExt(ext);
+    const title = file.name.replace(/\.[^.]+$/, "");
+    const db = getDb();
 
     setImporting(true);
     try {
-      console.log("[import] generating presigned URL…");
-      const uploadUrl = await getUploadUrl(fileKey, contentType);
+      console.log("[import] hashing file…");
+      const contentHash = await sha256OfFile(file.uri);
 
-      console.log("[import] uploading to R2…");
-      const uploadResult = await uploadAsync(uploadUrl, file.uri, {
-        httpMethod: "PUT",
-        headers: { "Content-Type": contentType },
-        uploadType: FileSystemUploadType.BINARY_CONTENT,
-      });
+      // Dedup: same bytes already in tracks?
+      const [dupe] = await db
+        .select()
+        .from(tracks)
+        .where(eq(tracks.contentHash, contentHash));
 
-      if (uploadResult.status < 200 || uploadResult.status >= 300) {
-        throw new Error(`Upload failed with status ${uploadResult.status}`);
+      let track: Track;
+      if (dupe) {
+        console.log(`[import] dedup hit: ${contentHash} → reusing track ${dupe.id}`);
+        track = dupe as Track;
+      } else {
+        const fileKey = buildContentKey(contentHash, ext);
+        console.log("[import] generating presigned URL…");
+        const uploadUrl = await getUploadUrl(fileKey, contentType);
+
+        console.log("[import] uploading to R2…");
+        const uploadResult = await uploadAsync(uploadUrl, file.uri, {
+          httpMethod: "PUT",
+          headers: { "Content-Type": contentType },
+          uploadType: FileSystemUploadType.BINARY_CONTENT,
+        });
+
+        if (uploadResult.status < 200 || uploadResult.status >= 300) {
+          throw new Error(`Upload failed with status ${uploadResult.status}`);
+        }
+
+        console.log("[import] inserting tracks row…");
+        const [inserted] = await db
+          .insert(tracks)
+          .values({
+            source: "upload",
+            sourceId: null,
+            contentHash,
+            title,
+            fileKey,
+            fileSize: file.size ?? null,
+            format: ext,
+          })
+          .returning();
+        track = inserted as Track;
       }
 
-      console.log("[import] inserting into DB…");
-      const title = file.name.replace(/\.[^.]+$/, "");
-
-      const [inserted] = await getDb()
-        .insert(tracks)
-        .values({
-          id: trackId,
-          userId,
-          title,
-          fileKey,
-          fileSize: file.size ?? null,
-          format: ext,
-        })
+      console.log("[import] linking userTracks…");
+      const [insertedLink] = await db
+        .insert(userTracks)
+        .values({ userId, trackId: track.id, originalBpm: null })
+        .onConflictDoNothing()
         .returning();
+      const userTrack =
+        insertedLink ??
+        (
+          await db
+            .select()
+            .from(userTracks)
+            .where(and(eq(userTracks.userId, userId), eq(userTracks.trackId, track.id)))
+        )[0]!;
 
-      addTrack(inserted as Track);
-      ensureLocalCopy(inserted as Track, userId).catch((e) =>
+      const libraryTrack: LibraryTrack = {
+        ...track,
+        userTrackId: userTrack.id,
+        addedAt: userTrack.addedAt,
+        originalBpm: userTrack.originalBpm,
+      };
+
+      addTrack(libraryTrack);
+      ensureLocalCopy(track, userId).catch((e) =>
         console.warn("[localAudio] import cache failed:", e?.message ?? e),
       );
       console.log("[import] done!");

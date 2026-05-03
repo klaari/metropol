@@ -1,4 +1,5 @@
 import { unlink } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { Hono } from "hono";
 import { eq, and, desc, notInArray } from "drizzle-orm";
 import { createDb, downloadJobs, tracks, userTracks } from "@aani/db";
@@ -70,11 +71,11 @@ downloadRoute.post("/downloads", async (c) => {
     return c.json({ error: "Could not extract YouTube video ID from URL" }, 400);
   }
 
-  // Check if track with this youtubeId already exists globally
+  // Check if track with this YouTube id already exists globally
   const [existingTrack] = await db
     .select()
     .from(tracks)
-    .where(eq(tracks.youtubeId, youtubeId));
+    .where(and(eq(tracks.source, "youtube"), eq(tracks.sourceId, youtubeId)));
 
   if (existingTrack) {
     // Track already in global library — just link to this user if not already linked
@@ -208,9 +209,40 @@ downloadRoute.post("/tracks/upload", async (c) => {
     || file.name.replace(/\.\w+$/, "");
   const artist = (formData.get("artist") as string | null)?.trim() || null;
 
-  const trackId = crypto.randomUUID();
-  const fileKey = `tracks/${trackId}.${format}`;
   const buffer = new Uint8Array(await file.arrayBuffer());
+  const contentHash = createHash("sha256").update(buffer).digest("hex");
+
+  // Dedup: if any track already exists with these bytes, just link the user.
+  const [dupe] = await db
+    .select()
+    .from(tracks)
+    .where(eq(tracks.contentHash, contentHash));
+
+  if (dupe) {
+    const linked = await db
+      .insert(userTracks)
+      .values({ userId, trackId: dupe.id, originalBpm: null })
+      .onConflictDoNothing()
+      .returning();
+    const userTrack =
+      linked[0] ??
+      (await db
+        .select()
+        .from(userTracks)
+        .where(and(eq(userTracks.userId, userId), eq(userTracks.trackId, dupe.id))))[0]!;
+    return c.json(
+      {
+        ...dupe,
+        userTrackId: userTrack.id,
+        addedAt: userTrack.addedAt,
+        originalBpm: userTrack.originalBpm,
+      },
+      200,
+    );
+  }
+
+  const trackId = crypto.randomUUID();
+  const fileKey = `tracks/${contentHash}.${format}`;
 
   const tmpPath = `/tmp/aani-upload-${trackId}.${format}`;
   let duration: number | null = null;
@@ -240,7 +272,9 @@ downloadRoute.post("/tracks/upload", async (c) => {
     .insert(tracks)
     .values({
       id: trackId,
-      youtubeId: `upload:${trackId}`,
+      source: "upload",
+      sourceId: null,
+      contentHash,
       title,
       artist,
       duration,

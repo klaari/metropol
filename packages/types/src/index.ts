@@ -1,6 +1,10 @@
+export type TrackSource = "youtube" | "soundcloud" | "upload";
+
 export interface Track {
   id: string;
-  youtubeId: string;
+  source: TrackSource;
+  sourceId: string | null;
+  contentHash: string;
   title: string;
   artist: string | null;
   duration: number | null;
@@ -9,11 +13,16 @@ export interface Track {
   format: string | null;
   sourceUrl: string | null;
   downloadedAt: Date;
+  // Per-user fields, populated when joined with userTracks.
+  originalBpm?: number | null;
+  localUri?: string | null;
 }
 
 export interface TrackInsert {
   id?: string;
-  youtubeId: string;
+  source: TrackSource;
+  sourceId?: string | null;
+  contentHash: string;
   title: string;
   artist?: string | null;
   duration?: number | null;

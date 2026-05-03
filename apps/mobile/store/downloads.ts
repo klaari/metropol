@@ -71,6 +71,7 @@ export const useDownloadsStore = create<DownloadsState>((set, get) => ({
           id: msg.jobId,
           userId: "",
           url: "",
+          youtubeId: null,
           status: msg.status,
           title: msg.title,
           artist: msg.artist,
