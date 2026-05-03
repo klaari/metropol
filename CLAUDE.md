@@ -1,9 +1,9 @@
-# Metropol Player — Claude Code Context
+# Aani — Claude Code Context
 
 ## What This App Is
 A personal mobile music player with tempo/pitch control, live BPM display,
 playlist management, and cloud backup. Built for personal use by a single user.
-Named: Metropol Player.
+Named: Aani (domain: aani.cc).
 
 ## Stack
 - **Mobile:** Expo (SDK 52+) + Expo Router (file-based routing)
@@ -18,7 +18,7 @@ Named: Metropol Player.
 
 ## Monorepo Structure
 ```
-metropol-player/
+aani/
 ├── apps/
 │   └── mobile/               → Expo app
 │       ├── app/              → Expo Router file-based routes
@@ -51,7 +51,11 @@ metropol-player/
 - Playback rate and pitch change together (no time-stretching) — simple rate adjustment
 - `currentBpm = originalBpm * playbackRate` — computed live, never stored
 - BPM entered manually by user in Phase 1 (auto-detection in Phase 2)
-- Track file stored in R2 with key pattern: `{userId}/{trackId}.{ext}`
+- Track files in R2 use two key patterns today:
+  - YouTube downloads (global, deduped via `tracks.youtubeId`): `tracks/{trackId}.m4a`
+  - Direct user uploads: `{userId}/{trackId}.{ext}`
+  - Cookies: `cookies/{userId}/yt-cookies.txt`
+  - Planned (task #12): unified content-addressable path `tracks/{contentHash}.{ext}`
 - Playback position and rate persisted per track in `playback_state` table
 
 ## Deployment

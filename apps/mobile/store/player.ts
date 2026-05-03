@@ -1,5 +1,5 @@
-import { playbackState, queueItems, tracks, userPlayerState, userTracks } from "@metropol/db";
-import type { Track } from "@metropol/types";
+import { playbackState, queueItems, tracks, userPlayerState, userTracks } from "@aani/db";
+import type { Track } from "@aani/types";
 import { eq, and, asc, inArray } from "drizzle-orm";
 import { create } from "zustand";
 import { getDb } from "../lib/db";

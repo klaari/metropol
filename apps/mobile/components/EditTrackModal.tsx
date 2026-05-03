@@ -1,4 +1,4 @@
-import type { Track } from "@metropol/types";
+import type { Track } from "@aani/types";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,

@@ -19,7 +19,7 @@ import { tmpdir } from "node:os";
  * arrhythmic) or any of the steps errors out.
  */
 export async function detectBpm(filePath: string): Promise<number | null> {
-  const wavPath = join(tmpdir(), `metropol-bpm-${process.pid}-${Date.now()}.wav`);
+  const wavPath = join(tmpdir(), `aani-bpm-${process.pid}-${Date.now()}.wav`);
   try {
     const ff = Bun.spawn(
       [

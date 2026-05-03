@@ -17,7 +17,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { eq, isNull, sql } from "drizzle-orm";
-import { createDb, tracks, userTracks } from "@metropol/db";
+import { createDb, tracks, userTracks } from "@aani/db";
 import { detectBpm } from "../src/lib/bpm";
 import { env } from "../src/lib/env";
 
@@ -81,7 +81,7 @@ async function main() {
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i]!;
     const ext = row.format ?? "m4a";
-    const localPath = join(tmpdir(), `metropol-bf-${row.trackId}.${ext}`);
+    const localPath = join(tmpdir(), `aani-bf-${row.trackId}.${ext}`);
     process.stdout.write(`  [${i + 1}/${rows.length}] ${row.title.slice(0, 60)} … `);
     try {
       await downloadObject(row.fileKey, localPath);

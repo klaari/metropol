@@ -1,4 +1,4 @@
-import type { DownloadJob, WsJobStatusMessage } from "@metropol/types";
+import type { DownloadJob, WsJobStatusMessage } from "@aani/types";
 import { create } from "zustand";
 import { apiFetch } from "../lib/api";
 

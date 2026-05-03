@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/clerk-expo";
-import type { WsJobStatusMessage } from "@metropol/types";
+import type { WsJobStatusMessage } from "@aani/types";
 import { backfillLocalCache } from "../lib/localAudio";
 import { useDownloadsStore } from "../store/downloads";
 import { useLibraryStore } from "../store/library";

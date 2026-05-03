@@ -1,4 +1,4 @@
-# Metropol TODO
+# Aani TODO
 
 ## 🔜 Tehtävä: "+ nappi" pikalisäys (clipboard-pohjainen)
 
@@ -8,7 +8,7 @@ Korvaa nykyinen Downloads-välilehden URL-tekstikenttä + napilla, joka tarkista
 
 **Työnkulku:**
 1. Käyttäjä kopioi YouTube-urlin (esim. Discogsin kautta)
-2. Avaa Metropolin
+2. Avaa Aanin
 3. Painaa "+" nappia (esim. Library- tai Player-näkymässä, tai tab barin yhteydessä)
 4. Sovellus tarkistaa leikepöydän → jos YouTube-url löytyy, se on valmiina kentässä
 5. Käyttäjä painaa "Download" → valmis, jatkaa muuta
@@ -30,10 +30,10 @@ Korvaa nykyinen Downloads-välilehden URL-tekstikenttä + napilla, joka tarkista
 
 **Prioriteetti:** Matala (tulevaisuus)  
 **Kuvaus:**  
-Native share extension joka mahdollistaa YouTube-urlin jakamisen suoraan selaimesta tai YouTube-appista Metropoliin ilman sovelluksen avaamista.
+Native share extension joka mahdollistaa YouTube-urlin jakamisen suoraan selaimesta tai YouTube-appista Aaniin ilman sovelluksen avaamista.
 
 **Työnkulku:**
-1. Selaimessa tai YouTubessa → "Jaa" → valitse Metropol
+1. Selaimessa tai YouTubessa → "Jaa" → valitse Aani
 2. Extension käynnistyy taustalla, lähettää urlin API:lle
 3. Lataus alkaa taustalla, sovellusta ei tarvitse avata
 
@@ -72,7 +72,7 @@ lisäämisen tietokoneelta — kappaleet synkronoituvat automaattisesti mobiilii
 
 **Prioriteetti:** Korkea (myöhemmin)  
 **Kuvaus:**  
-Täysimittainen Discogs-selain appin sisällä. Muuttaa Metropolin luonteen download-työkalusta Discogs-integroiduksi musiikkikirjastoksi.
+Täysimittainen Discogs-selain appin sisällä. Muuttaa Aanin luonteen download-työkalusta Discogs-integroiduksi musiikkikirjastoksi.
 
 ### Ominaisuudet
 
@@ -89,7 +89,7 @@ Täysimittainen Discogs-selain appin sisällä. Muuttaa Metropolin luonteen down
 **Collection & Wantlist**
 - Oma levy-kokoelma selattavissa ja hakettavissa
 - Wantlist — selaa mitä haluat, lataa previewt tai täydet biisit
-- Merkintä mitä on jo ladattu Metropoliin
+- Merkintä mitä on jo ladattu Aaniin
 
 **Autentikointi**
 - Discogs OAuth 1.0a — kirjautuminen omalla Discogs-tilillä

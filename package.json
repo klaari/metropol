@@ -1,5 +1,5 @@
 {
-  "name": "metropol",
+  "name": "aani",
   "private": true,
   "scripts": {
     "dev": "turbo run dev",

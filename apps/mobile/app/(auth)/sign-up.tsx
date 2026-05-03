@@ -123,7 +123,7 @@ export default function SignUpScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.inner}>
-        <Text style={styles.title}>Metropol Player</Text>
+        <Text style={styles.title}>Aani</Text>
         <Text style={styles.subtitle}>Create your account</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}

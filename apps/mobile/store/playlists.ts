@@ -1,5 +1,5 @@
-import { playlists, playlistTracks, tracks } from "@metropol/db";
-import type { Playlist, Track } from "@metropol/types";
+import { playlists, playlistTracks, tracks } from "@aani/db";
+import type { Playlist, Track } from "@aani/types";
 import { eq, and, asc, sql } from "drizzle-orm";
 import { create } from "zustand";
 import { getDb } from "../lib/db";

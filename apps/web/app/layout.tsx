@@ -4,7 +4,7 @@ import Nav from "@/components/Nav";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Metropol",
+  title: "Aani",
   description: "Your music library",
 };
 

@@ -1,8 +1,8 @@
-# Metropol Player — Spec
+# Aani — Spec
 
 ## Vision
 
-Metropol Player on henkilökohtainen mobiilimusiikkisoitin DJ-käyttöön. Ydinidea:
+Aani on henkilökohtainen mobiilimusiikkisoitin DJ-käyttöön. Ydinidea:
 selaat Discogsia, löydät biisin, lataat sen — kaikki yhdessä sovelluksessa. Kirjasto
 synkronoituu pilveen ja soitin tukee tempo/pitch-säätöä live-BPM-näytöllä settisuunnittelua varten.
 
@@ -67,7 +67,7 @@ joka tarkistaa leikepöydän vain kun käyttäjä itse painaa sitä.
 
 **Työnkulku:**
 1. Käyttäjä kopioi YouTube-urlin (esim. Discogsin kautta selaimessa)
-2. Avaa Metropolin
+2. Avaa Aanin
 3. Painaa "+" nappia (sijainti: tab bar tai library FAB)
 4. App tarkistaa leikepöydän → YouTube-url esitäyttää kentän
 5. Käyttäjä painaa "Download" → valmis, jatkaa muuta
@@ -96,8 +96,8 @@ mobiiliin kun palaat puhelimelle.
 ### Stack
 - **Framework:** Next.js (App Router)
 - **Auth:** `@clerk/nextjs` — sama Clerk-sovellus kuin mobiilissa
-- **DB:** `@metropol/db` suoraan server componenteista
-- **Tyypitykset:** `@metropol/types` jaettu paketti
+- **DB:** `@aani/db` suoraan server componenteista
+- **Tyypitykset:** `@aani/types` jaettu paketti
 
 ### Sijainti monoreposssa
 ```
@@ -158,7 +158,7 @@ poistuu sovelluksesta. Lisäksi oman collectionin ja wantlistin selaus.
 **Collection & Wantlist**
 - Oman levy-kokoelman selaus ja haku
 - Wantlist-selaus: näe mitä haluaisit, lataa previewt
-- Merkintä: onko biisi jo ladattu Metropoliin
+- Merkintä: onko biisi jo ladattu Aaniin
 
 **Autentikointi**
 - Discogs OAuth 1.0a
@@ -182,7 +182,7 @@ poistuu sovelluksesta. Lisäksi oman collectionin ja wantlistin selaus.
 
 **Share Extension**
 Native iOS/Android share extension: jaa YouTube-url suoraan selaimesta
-Metropoliin ilman sovelluksen avaamista. Vaatii Expo bare workflow tai
+Aaniin ilman sovelluksen avaamista. Vaatii Expo bare workflow tai
 custom native build target.
 
 **Automaattinen BPM-tunnistus**

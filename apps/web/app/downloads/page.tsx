@@ -3,7 +3,7 @@
 import DownloadList from "@/components/DownloadList";
 import { useAuth } from "@clerk/nextjs";
 import { useRef, useState, useEffect } from "react";
-import type { DownloadJob } from "@metropol/types";
+import type { DownloadJob } from "@aani/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 const YOUTUBE_URL_REGEX = /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\//;

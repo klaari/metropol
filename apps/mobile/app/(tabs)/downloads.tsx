@@ -12,7 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
-import type { DownloadJob } from "@metropol/types";
+import type { DownloadJob } from "@aani/types";
 import { useDownloadsStore } from "../../store/downloads";
 import { DownloadJobItem } from "../../components/DownloadJobItem";
 import { useDownloadWs } from "../../hooks/useDownloadWs";

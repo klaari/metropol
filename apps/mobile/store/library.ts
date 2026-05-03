@@ -1,5 +1,5 @@
-import { tracks, userTracks } from "@metropol/db";
-import type { LibraryTrack } from "@metropol/types";
+import { tracks, userTracks } from "@aani/db";
+import type { LibraryTrack } from "@aani/types";
 import { eq, desc } from "drizzle-orm";
 import { create } from "zustand";
 import { getDb } from "../lib/db";

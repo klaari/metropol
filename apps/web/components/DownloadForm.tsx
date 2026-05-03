@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@clerk/nextjs";
-import type { DownloadJob } from "@metropol/types";
+import type { DownloadJob } from "@aani/types";
 
 const YOUTUBE_URL_REGEX =
   /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\//;

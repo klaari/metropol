@@ -59,7 +59,7 @@ export default function SignInScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.inner}>
-        <Text style={styles.title}>Metropol Player</Text>
+        <Text style={styles.title}>Aani</Text>
         <Text style={styles.subtitle}>Sign in to continue</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}

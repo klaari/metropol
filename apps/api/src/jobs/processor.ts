@@ -1,8 +1,8 @@
 import { rm } from "node:fs/promises";
 import { eq } from "drizzle-orm";
-import { createDb } from "@metropol/db";
-import { downloadJobs, tracks, userTracks } from "@metropol/db";
-import type { WsJobStatusMessage, DownloadJobStatus } from "@metropol/types";
+import { createDb } from "@aani/db";
+import { downloadJobs, tracks, userTracks } from "@aani/db";
+import type { WsJobStatusMessage, DownloadJobStatus } from "@aani/types";
 import { env } from "../lib/env";
 import { uploadToR2, deleteFromR2 } from "../lib/r2";
 import { detectBpm } from "../lib/bpm";

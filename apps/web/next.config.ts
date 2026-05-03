@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@metropol/types"],
+  transpilePackages: ["@aani/types"],
 };
 
 export default nextConfig;

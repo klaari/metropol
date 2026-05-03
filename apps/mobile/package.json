@@ -1,5 +1,5 @@
 {
-  "name": "@metropol/mobile",
+  "name": "@aani/mobile",
   "version": "1.0.0",
   "private": true,
   "main": "expo-router/entry",
@@ -17,8 +17,8 @@
     "@aws-sdk/s3-request-presigner": "^3.700.0",
     "@clerk/clerk-expo": "^2.9.0",
     "@expo/vector-icons": "^15.0.3",
-    "@metropol/db": "*",
-    "@metropol/types": "*",
+    "@aani/db": "*",
+    "@aani/types": "*",
     "expo": "~54.0.33",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.0",

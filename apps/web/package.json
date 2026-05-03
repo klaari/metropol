@@ -1,5 +1,5 @@
 {
-  "name": "@metropol/web",
+  "name": "@aani/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@clerk/nextjs": "^6",
-    "@metropol/types": "*",
+    "@aani/types": "*",
     "next": "^15.5.12",
     "react": "19.2.4",
     "react-dom": "19.2.4"

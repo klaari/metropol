@@ -11,7 +11,7 @@ COPY apps/api/ apps/api/
 
 RUN bun install
 
-RUN mkdir -p /tmp/metropol-downloads
+RUN mkdir -p /tmp/aani-downloads
 
 EXPOSE 3000
 

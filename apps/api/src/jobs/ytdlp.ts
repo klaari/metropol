@@ -77,7 +77,7 @@ export interface DownloadResult {
 
 export async function downloadAudio(url: string, opts?: YtDlpOptions): Promise<DownloadResult> {
   const cleanUrl = stripPlaylistParams(url.trim());
-  const dir = await mkdtemp(join(tmpdir(), "metropol-"));
+  const dir = await mkdtemp(join(tmpdir(), "aani-"));
   const output = join(dir, "audio.%(ext)s");
 
   const args = [

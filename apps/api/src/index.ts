@@ -50,7 +50,7 @@ const server = Bun.serve({
   },
 });
 
-console.log(`Metropol API running on port ${server.port}`);
+console.log(`Aani API running on port ${server.port}`);
 
 // Recover jobs that were in-progress when server last stopped
 recoverStaleJobs().catch((err) => {

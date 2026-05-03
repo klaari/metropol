@@ -1,11 +1,5 @@
 {
   "expo": {
-    "extra": {
-      "eas": {
-        "projectId": "54cc1881-9fb9-4c79-87d4-afa510f09a57"
-      }
-    },
-    "owner": "karin-atk",
-    "slug": "metropol"
+    "slug": "aani"
   }
 }

@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from "bun";
-import type { WsJobStatusMessage } from "@metropol/types";
+import type { WsJobStatusMessage } from "@aani/types";
 
 export interface WsData {
   token: string;

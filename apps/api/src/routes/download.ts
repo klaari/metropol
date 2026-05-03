@@ -1,7 +1,7 @@
 import { unlink } from "node:fs/promises";
 import { Hono } from "hono";
 import { eq, and, desc, notInArray } from "drizzle-orm";
-import { createDb, downloadJobs, tracks, userTracks } from "@metropol/db";
+import { createDb, downloadJobs, tracks, userTracks } from "@aani/db";
 import { clerkAuth } from "../middleware/auth";
 import { env } from "../lib/env";
 import { enqueue } from "../jobs/queue";
@@ -212,7 +212,7 @@ downloadRoute.post("/tracks/upload", async (c) => {
   const fileKey = `tracks/${trackId}.${format}`;
   const buffer = new Uint8Array(await file.arrayBuffer());
 
-  const tmpPath = `/tmp/metropol-upload-${trackId}.${format}`;
+  const tmpPath = `/tmp/aani-upload-${trackId}.${format}`;
   let duration: number | null = null;
   let originalBpm: number | null = null;
   try {

@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "Metropol Player",
-    "slug": "metropol",
+    "name": "Aani",
+    "slug": "aani",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "metropol-player",
+    "scheme": "aani-player",
     "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.metropol.player",
+      "bundleIdentifier": "cc.aani.player",
       "infoPlist": {
         "UIBackgroundModes": [
           "audio"
@@ -27,7 +27,7 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#000000"
       },
-      "package": "com.metropol.player",
+      "package": "cc.aani.player",
       "edgeToEdgeEnabled": true
     },
     "plugins": [
@@ -35,19 +35,18 @@
       "expo-secure-store",
       "expo-updates"
     ],
-    "updates": {
-      "url": "https://u.expo.dev/54cc1881-9fb9-4c79-87d4-afa510f09a57",
-      "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 0
-    },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "extra": {
+      "router": {},
       "eas": {
-        "projectId": "54cc1881-9fb9-4c79-87d4-afa510f09a57"
+        "projectId": "ce8e5af8-ae04-4428-a422-734b2f5aa488"
       }
     },
-    "owner": "karin-atk"
+    "owner": "karin-atk",
+    "updates": {
+      "url": "https://u.expo.dev/ce8e5af8-ae04-4428-a422-734b2f5aa488"
+    }
   }
 }

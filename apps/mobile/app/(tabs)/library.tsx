@@ -1,5 +1,5 @@
-import { tracks } from "@metropol/db";
-import type { LibraryTrack, Track } from "@metropol/types";
+import { tracks } from "@aani/db";
+import type { LibraryTrack, Track } from "@aani/types";
 import { useAuth } from "@clerk/clerk-expo";
 import * as DocumentPicker from "expo-document-picker";
 import {

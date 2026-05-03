@@ -1,4 +1,4 @@
-import type { LibraryTrack } from "@metropol/types";
+import type { LibraryTrack } from "@aani/types";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 function formatDuration(seconds: number | null): string {

@@ -1,8 +1,8 @@
 import type { ServerWebSocket } from "bun";
 import { verifyToken } from "@clerk/backend";
 import { eq, and, notInArray } from "drizzle-orm";
-import { createDb, downloadJobs } from "@metropol/db";
-import type { WsJobStatusMessage } from "@metropol/types";
+import { createDb, downloadJobs } from "@aani/db";
+import type { WsJobStatusMessage } from "@aani/types";
 import { env } from "../lib/env";
 import { addConnection, removeConnection, type WsData } from "./connections";
 

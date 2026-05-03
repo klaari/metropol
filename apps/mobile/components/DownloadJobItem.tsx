@@ -1,7 +1,7 @@
 import React from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import type { DownloadJob, DownloadJobStatus } from "@metropol/types";
+import type { DownloadJob, DownloadJobStatus } from "@aani/types";
 
 const STATUS_ICONS: Record<DownloadJobStatus, { name: string; color: string }> = {
   queued: { name: "time-outline", color: "#666" },

@@ -1,5 +1,5 @@
-import { tracks, userTracks } from "@metropol/db";
-import type { Track } from "@metropol/types";
+import { tracks, userTracks } from "@aani/db";
+import type { Track } from "@aani/types";
 import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import { Directory, File, Paths } from "expo-file-system";
 import { getDb } from "./db";

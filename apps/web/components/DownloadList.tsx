@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
-import type { DownloadJob, DownloadJobStatus, WsJobStatusMessage } from "@metropol/types";
+import type { DownloadJob, DownloadJobStatus, WsJobStatusMessage } from "@aani/types";
 
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";

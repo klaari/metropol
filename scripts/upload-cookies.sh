@@ -11,7 +11,7 @@ if [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
-# Upload YouTube cookies to Metropol API.
+# Upload YouTube cookies to Aani API.
 #
 # Usage:
 #   ./scripts/upload-cookies.sh                  # extract from chrome, upload
@@ -21,13 +21,13 @@ fi
 #                                                # not for routine cookie refreshes)
 #
 # Required env vars (set in .env or export before running):
-#   METROPOL_API_URL  - API base URL (e.g. https://api.example.com)
-#   METROPOL_API_KEY  - API key matching the API_KEY env var on the server
-#   METROPOL_USER_ID  - Your Clerk user ID
+#   AANI_API_URL  - API base URL (e.g. https://api.example.com)
+#   AANI_API_KEY  - API key matching the API_KEY env var on the server
+#   AANI_USER_ID  - Your Clerk user ID
 
-: "${METROPOL_API_URL:?Set METROPOL_API_URL}"
-: "${METROPOL_API_KEY:?Set METROPOL_API_KEY}"
-: "${METROPOL_USER_ID:?Set METROPOL_USER_ID}"
+: "${AANI_API_URL:?Set AANI_API_URL}"
+: "${AANI_API_KEY:?Set AANI_API_KEY}"
+: "${AANI_USER_ID:?Set AANI_USER_ID}"
 
 BROWSER="chrome"
 REBUILD=0
@@ -56,8 +56,8 @@ out.save(ignore_discard=True, ignore_expires=True)
 print(f'Saved {len(out)} YouTube/Google cookies')
 "
 
-echo "Uploading to ${METROPOL_API_URL}/cookies..."
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${METROPOL_API_URL}/cookies" -H "X-API-Key: ${METROPOL_API_KEY}" -H "X-User-Id: ${METROPOL_USER_ID}" -F "cookies=@${TMPFILE}")
+echo "Uploading to ${AANI_API_URL}/cookies..."
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${AANI_API_URL}/cookies" -H "X-API-Key: ${AANI_API_KEY}" -H "X-User-Id: ${AANI_USER_ID}" -F "cookies=@${TMPFILE}")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')

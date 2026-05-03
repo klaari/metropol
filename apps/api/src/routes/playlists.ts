@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { eq, and, asc, desc, sql } from "drizzle-orm";
-import { createDb, playlists, playlistTracks, tracks, userTracks } from "@metropol/db";
+import { createDb, playlists, playlistTracks, tracks, userTracks } from "@aani/db";
 import { clerkAuth } from "../middleware/auth";
 import { env } from "../lib/env";
 

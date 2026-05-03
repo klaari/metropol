@@ -19,7 +19,7 @@ ok()   { echo -e "  ${GREEN}✓${NC} $1"; PASS=$((PASS + 1)); }
 fail() { echo -e "  ${RED}✗${NC} $1"; FAIL=$((FAIL + 1)); }
 warn() { echo -e "  ${YELLOW}⚠${NC} $1"; WARNS+=("$1"); }
 
-echo -e "\n${BOLD}🚀 Metropol pre-build checks${NC} (profile: $PROFILE)\n"
+echo -e "\n${BOLD}🚀 Aani pre-build checks${NC} (profile: $PROFILE)\n"
 
 # ── 1. Lock file in sync ───────────────────────────────────────────────────
 echo -e "${BOLD}[1/6] Lock file${NC}"
@@ -78,8 +78,8 @@ fi
 
 # ── 5. Bundle compiles ─────────────────────────────────────────────────────
 echo -e "${BOLD}[5/6] Bundle export${NC}"
-BUNDLE_OUT=$(cd "$MOBILE_DIR" && npx expo export --platform android --output-dir /tmp/metropol-check 2>&1 || true)
-rm -rf /tmp/metropol-check
+BUNDLE_OUT=$(cd "$MOBILE_DIR" && npx expo export --platform android --output-dir /tmp/aani-check 2>&1 || true)
+rm -rf /tmp/aani-check
 if echo "$BUNDLE_OUT" | grep -q "Exported"; then
   ok "Android bundle exports cleanly"
 else

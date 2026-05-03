@@ -52,7 +52,7 @@ export default function Nav() {
       {/* ── Desktop: slim top bar ── */}
       <header className="hidden sm:flex items-center justify-between px-6 h-14 border-b border-zinc-900 bg-black sticky top-0 z-40">
         {/* Wordmark */}
-        <span className="text-white font-bold text-lg tracking-tight">Metropol</span>
+        <span className="text-white font-bold text-lg tracking-tight">Aani</span>
 
         {/* Nav links */}
         <nav className="flex items-center gap-1">
@@ -80,7 +80,7 @@ export default function Nav() {
 
       {/* ── Mobile: top wordmark bar ── */}
       <header className="sm:hidden flex items-center justify-between px-4 h-12 bg-black">
-        <span className="text-white font-bold text-base tracking-tight">Metropol</span>
+        <span className="text-white font-bold text-base tracking-tight">Aani</span>
         <UserButton afterSignOutUrl="/sign-in" />
       </header>
 
