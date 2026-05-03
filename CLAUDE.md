@@ -35,6 +35,11 @@ aani/
 ```
 
 ## Conventions
+- DB migrations: write hand-rolled SQL files in `packages/db/drizzle/NNNN_*.sql`
+  and apply with `npm run db:apply` from `packages/db/`. Tracking lives in the
+  custom `aani_migrations` table — do **not** use `drizzle-kit migrate` (the
+  meta journal is stale past 0002 and silently skips later files). Use
+  `db:apply:dry` to preview, `db:bootstrap` only on a fresh tracking table.
 - All DB queries use Drizzle ORM — never raw SQL strings
 - Zustand stores in `apps/mobile/store/` — one store per domain
 - Hooks in `apps/mobile/hooks/` — prefix with `use`

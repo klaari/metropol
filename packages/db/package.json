@@ -7,7 +7,9 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate",
+    "db:apply": "node --env-file=../../.env scripts/apply-migrations.mjs",
+    "db:apply:dry": "node --env-file=../../.env scripts/apply-migrations.mjs --dry-run",
+    "db:bootstrap": "node --env-file=../../.env scripts/apply-migrations.mjs --bootstrap",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio"
   },
