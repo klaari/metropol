@@ -1,31 +1,5 @@
 # Aani TODO
 
-## 🔜 Tehtävä: "+ nappi" pikalisäys (clipboard-pohjainen)
-
-**Prioriteetti:** Korkea  
-**Kuvaus:**  
-Korvaa nykyinen Downloads-välilehden URL-tekstikenttä + napilla, joka tarkistaa leikepöydän vain kun käyttäjä painaa sitä itse.
-
-**Työnkulku:**
-1. Käyttäjä kopioi YouTube-urlin (esim. Discogsin kautta)
-2. Avaa Aanin
-3. Painaa "+" nappia (esim. Library- tai Player-näkymässä, tai tab barin yhteydessä)
-4. Sovellus tarkistaa leikepöydän → jos YouTube-url löytyy, se on valmiina kentässä
-5. Käyttäjä painaa "Download" → valmis, jatkaa muuta
-6. Kappale ilmestyy kirjastoon kun lataus valmis — ei tarvetta seurata edistymistä
-
-**UX-periaatteet:**
-- Ei automaattisia popupeja tai keskeytyksiä
-- Käyttäjä itse initioi aina (opt-in)
-- Downloads-välilehden voi yksinkertaistaa tai poistaa kokonaan myöhemmin
-
-**Tekniset huomiot:**
-- `Clipboard.getStringAsync()` (expo-clipboard) kun nappia painetaan
-- Validoi YouTube URL ennen esitäyttöä
-- Nappi voi olla floating action button tai tab barin "+" ikoni
-
----
-
 ## 🔮 Myöhemmin: Share Extension (iOS + Android)
 
 **Prioriteetti:** Matala (tulevaisuus)  
@@ -45,23 +19,15 @@ Native share extension joka mahdollistaa YouTube-urlin jakamisen suoraan selaime
 
 ---
 
-## 🔜 Tehtävä: Haku (search)
+## 🔜 Tehtävä: Haun jatkokehitys
 
-**Prioriteetti:** Korkea
+**Prioriteetti:** Keskitaso
 **Kuvaus:**
-Hakutoiminto kirjastoon — kappaleen, artistin, levyn nimellä. Pohjustaa
-myös tulevaa Discogs-selausta ja mixin-ominaisuuksia (esim. "etsi sopiva
-seuraava biisi tästä BPM-haarukasta").
-
-**MVP:**
-- Hakukenttä Library-välilehden yläosassa
-- Live-suodatus kirjoittaessa (artist / title / album)
-- Tyhjä tila + ei-tuloksia tila
-
-**Myöhemmin:**
-- Suodattimet: BPM-haarukka, key, genre
+Library-haku perusversio toimitettu. Jatkokehitys:
+- Suodattimet: BPM-haarukka, key, genre, label, vuosi
 - Lajittelu: viimeksi soitettu, lisätty, BPM
 - Globaali haku (kirjasto + Discogs samalla kertaa)
+- Etsi sopiva seuraava biisi nykyisestä BPM-haarukasta (mixin-pohja)
 
 ---
 
@@ -97,46 +63,20 @@ auto-cue downbeatille, loop-pisteet, transition-efektit.
 
 ---
 
-## 🔜 Tehtävä: Discogs-rikastus (track-tiedot + collection/wantlist)
+## 🔜 Tehtävä: Discogs-rikastuksen jatko
 
-**Prioriteetti:** Korkea
+**Prioriteetti:** Keskitaso
 **Kuvaus:**
-Rikasta olemassa olevien kappaleiden metadata Discogsin avulla ja anna
-käyttäjän hallita omaa kokoelmaansa / wantlistia suoraan Aanista. Tämä on
-kevyempi ensiaskel ennen täysimittaista Discogs-selainta.
+Manuaalinen Discogs-rikastus toimitettu (search → match → enrich +
+collection/wantlist togglet + notes). Jäljellä:
 
-**Track-rikastus:**
-- Hae release Discogs-API:lla (artist + title) tai käyttäjän valitsemana matchina
-- Tallenna kappaleelle: `genres[]`, `styles[]`, `releaseYear`, `label`,
-  `catalogNumber`, `discogsReleaseId`, `coverUrl`
-- Näytä rikastettu data player- ja library-näkymässä
-- "Re-match" -toiminto jos automaattinen osuma on väärä
-
-**Collection / Wantlist -tila:**
-- Näytä per kappale: onko Discogs-collectionissa tai wantlistissä (badge)
-- Lataa user-collection + wantlist taustalla, cachetä paikallisesti
-- Päivitys pull-to-refreshillä tai manuaalisella sync-napilla
-
-**Toiminnot:**
-- "Lisää collectioniin" / "Lisää wantlistiin" -napit kappalenäkymässä
-- Notes-kenttä: vapaa muistiinpano (esim. "ostettu Helsingistä 2024", "haluan 12\"-version")
-- Poisto kummastakin
-
-**Tekniset huomiot:**
-- Discogs OAuth 1.0a — token-vaihto vaatii backend-endpointin (`apps/api`)
-- API-rajat: 60 req/min autentikoituna → batch-rikastus ingestissä, ei
-  ad-hoc client-puolelta
-- Schema: lisää `tracks`-tauluun discogs-kentät, uusi taulu
-  `discogs_user_items` (releaseId, type: collection|wantlist, note, syncedAt)
-- Mätsäystrategia: Discogs search → top N → automaattinen jos selvä osuma
-  (artist + title + duration), muuten käyttäjälle valittavaksi
-
-**Vaiheistus:**
-1. Discogs OAuth + token-tallennus
-2. Track-rikastus (manuaalinen "Etsi Discogsista" -nappi yhdellä kappaleella)
-3. Batch-rikastus uusille kappaleille ingestissä
-4. Collection/wantlist -synkka + badget
-5. Lisää/poista collection/wantlist + notes
+- Automaattinen ehdotus uusille kappaleille ingestin yhteydessä
+  (artist + title → Discogs search → jos selvä osuma niin auto-enrich,
+  muuten merkitään "tarkista")
+- Library-näkymässä badget collection/wantlist -tilasta (haku tracks-
+  taulun JOIN discogs_user_items kautta)
+- Library-haku huomioi Discogs-metadatan (label, catalog#, year, genre)
+- Cover-art player-näkymässä jos `discogsMetadata.coverUrl` löytyy
 
 ---
 
@@ -216,3 +156,14 @@ tehdä joskus.
 - **Web-sovellus (Next.js)** — `apps/web/` Turboreposessa. Clerk-auth,
   library / playlists / downloads / settings -reitit, sama API kuin
   mobiilissa. Deploy: Vercel.
+- **Library-haku** — TextInput Library-välilehden yläosassa, suodattaa
+  title + artist mukaan. Tyhjän tilan ja ei-tulosten erottelu.
+- **"+ nappi" pikalisäys** — Downloads-välilehden aina näkyvä URL-bar
+  korvattu "+" napilla joka esitäyttää YouTube-urlin leikepöydältä
+  validoiden. Cancel-napilla pois.
+- **Discogs-rikastus (manuaalinen)** — Player-näkymästä disc-ikoni
+  avaa sheetin: search → match → enrich. Genres/styles/year/label/cat#/
+  cover tallennetaan jsonb-kenttänä `tracks.discogsMetadata`. Per-track
+  collection/wantlist togglet kirjautuvat sekä Discogsiin että
+  paikalliseen `discogs_user_items`-tauluun, jossa myös notes-kenttä.
+  Header-piste signaloi tilan: vihreä = collection, punainen = wantlist.
