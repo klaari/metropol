@@ -10,6 +10,7 @@ import {
   SafeAreaView,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 import { useAuth } from "@clerk/clerk-expo";
 import { useRouter } from "expo-router";
 import type { DownloadJob } from "@aani/types";
@@ -20,6 +21,13 @@ import { useDownloadWs } from "../../hooks/useDownloadWs";
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 const MAX_RECENT_JOBS = 10;
 
+const YOUTUBE_URL_REGEX =
+  /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\//i;
+
+function isYouTubeUrl(value: string): boolean {
+  return YOUTUBE_URL_REGEX.test(value.trim());
+}
+
 export default function DownloadsScreen() {
   const { getToken } = useAuth();
   const router = useRouter();
@@ -27,6 +35,8 @@ export default function DownloadsScreen() {
     useDownloadsStore();
   const [url, setUrl] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [inputVisible, setInputVisible] = useState(false);
+  const inputRef = useRef<TextInput>(null);
 
   useDownloadWs();
 
@@ -73,6 +83,26 @@ export default function DownloadsScreen() {
 
   const recentJobs = jobs.slice(0, MAX_RECENT_JOBS);
 
+  const openInput = async () => {
+    let prefill = "";
+    try {
+      const clip = await Clipboard.getStringAsync();
+      if (clip && isYouTubeUrl(clip)) {
+        prefill = clip.trim();
+      }
+    } catch {
+      // clipboard read can fail on some devices — fall back to empty
+    }
+    setUrl(prefill);
+    setInputVisible(true);
+    // autoFocus on the TextInput handles focus on mount
+  };
+
+  const closeInput = () => {
+    setInputVisible(false);
+    setUrl("");
+  };
+
   const handleSubmit = async () => {
     const trimmed = url.trim();
     if (!trimmed) return;
@@ -92,6 +122,7 @@ export default function DownloadsScreen() {
       Alert.alert("Download Error", error);
     } else {
       setUrl("");
+      setInputVisible(false);
     }
   };
 
@@ -125,7 +156,6 @@ export default function DownloadsScreen() {
         </Pressable>
       )}
 
-      {/* Recent downloads */}
       {recentJobs.length > 0 ? (
         <View style={styles.recentSection}>
           <Text style={styles.recentLabel}>Recent</Text>
@@ -145,39 +175,61 @@ export default function DownloadsScreen() {
         <View style={styles.emptyContainer}>
           <Ionicons name="cloud-download-outline" size={40} color="#333" />
           <Text style={styles.emptyText}>No downloads yet</Text>
+          <Text style={styles.emptyHint}>Tap + to add a YouTube URL</Text>
         </View>
       )}
 
-      {/* Input pinned to bottom */}
-      <View style={styles.inputBar}>
-        <TextInput
-          style={styles.input}
-          placeholder="Paste YouTube URL..."
-          placeholderTextColor="#555"
-          value={url}
-          onChangeText={setUrl}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          returnKeyType="go"
-          onSubmitEditing={handleSubmit}
-        />
-        <Pressable
-          style={[
-            styles.submitButton,
-            (!url.trim() || submitting) && styles.submitButtonDisabled,
-          ]}
-          onPress={handleSubmit}
-          disabled={submitting || !url.trim()}
-          hitSlop={4}
-        >
-          <Ionicons
-            name={submitting ? "hourglass-outline" : "arrow-up"}
-            size={20}
-            color="#000"
+      {inputVisible ? (
+        <View style={styles.inputBar}>
+          <Pressable
+            style={styles.cancelButton}
+            onPress={closeInput}
+            hitSlop={8}
+            disabled={submitting}
+          >
+            <Ionicons name="close" size={22} color="#888" />
+          </Pressable>
+          <TextInput
+            ref={inputRef}
+            style={styles.input}
+            placeholder="Paste YouTube URL..."
+            placeholderTextColor="#555"
+            value={url}
+            onChangeText={setUrl}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            returnKeyType="go"
+            onSubmitEditing={handleSubmit}
+            autoFocus
+            selectTextOnFocus
           />
+          <Pressable
+            style={[
+              styles.submitButton,
+              (!url.trim() || submitting) && styles.submitButtonDisabled,
+            ]}
+            onPress={handleSubmit}
+            disabled={submitting || !url.trim()}
+            hitSlop={4}
+          >
+            <Ionicons
+              name={submitting ? "hourglass-outline" : "arrow-up"}
+              size={20}
+              color="#000"
+            />
+          </Pressable>
+        </View>
+      ) : (
+        <Pressable
+          style={styles.fab}
+          onPress={openInput}
+          android_ripple={{ color: "rgba(0,0,0,0.15)" }}
+        >
+          <Ionicons name="add" size={22} color="#000" />
+          <Text style={styles.fabLabel}>Add URL</Text>
         </Pressable>
-      </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -235,6 +287,10 @@ const styles = StyleSheet.create({
     color: "#444",
     fontSize: 15,
   },
+  emptyHint: {
+    color: "#333",
+    fontSize: 13,
+  },
   inputBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -243,6 +299,13 @@ const styles = StyleSheet.create({
     gap: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#222",
+  },
+  cancelButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
   },
   input: {
     flex: 1,
@@ -265,5 +328,28 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     opacity: 0.2,
+  },
+  fab: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    height: 48,
+    paddingHorizontal: 18,
+    paddingRight: 22,
+    borderRadius: 24,
+    backgroundColor: "#fff",
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    gap: 4,
+  },
+  fabLabel: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#000",
   },
 });
