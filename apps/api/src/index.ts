@@ -6,6 +6,7 @@ import { healthRoute } from "./routes/health";
 import { downloadRoute } from "./routes/download";
 import { cookiesRoute } from "./routes/cookies";
 import { playlistsRoute } from "./routes/playlists";
+import { discogsRoute } from "./routes/discogs";
 import { handleWsOpen, handleWsClose, handleWsMessage } from "./ws/handler";
 import { initProcessor, recoverStaleJobs } from "./jobs/processor";
 import { startBgutilServer } from "./lib/bgutil";
@@ -25,6 +26,7 @@ app.route("/", healthRoute);
 app.route("/", downloadRoute);
 app.route("/", cookiesRoute);
 app.route("/", playlistsRoute);
+app.route("/", discogsRoute);
 
 const server = Bun.serve({
   port: env.port,

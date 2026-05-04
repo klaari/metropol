@@ -13,4 +13,6 @@ export const env = {
   r2SecretKey: required("R2_SECRET_KEY"),
   r2Bucket: required("R2_BUCKET"),
   apiKey: process.env.API_KEY || null,
+  discogsToken: process.env.DISCOGS_TOKEN || null,
+  discogsUsername: process.env.DISCOGS_USERNAME || null,
 } as const;
