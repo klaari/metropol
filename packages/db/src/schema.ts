@@ -8,7 +8,26 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  jsonb,
 } from "drizzle-orm/pg-core";
+
+export type DiscogsMetadata = {
+  releaseId: string;
+  masterId?: string | null;
+  title?: string | null;
+  artist?: string | null;
+  year?: number | null;
+  label?: string | null;
+  catalogNumber?: string | null;
+  country?: string | null;
+  format?: string[] | null;
+  genres?: string[] | null;
+  styles?: string[] | null;
+  coverUrl?: string | null;
+  thumbUrl?: string | null;
+  resourceUrl?: string | null;
+  fetchedAt: string;
+};
 
 export const tracks = pgTable(
   "tracks",
@@ -25,11 +44,38 @@ export const tracks = pgTable(
     format: text("format"),
     sourceUrl: text("source_url"),
     downloadedAt: timestamp("downloaded_at").defaultNow().notNull(),
+    discogsReleaseId: text("discogs_release_id"),
+    discogsMetadata: jsonb("discogs_metadata").$type<DiscogsMetadata | null>(),
   },
   (t) => [
     uniqueIndex("tracks_source_source_id_idx")
       .on(t.source, t.sourceId)
       .where(sql`${t.sourceId} IS NOT NULL`),
+    index("tracks_discogs_release_id_idx")
+      .on(t.discogsReleaseId)
+      .where(sql`${t.discogsReleaseId} IS NOT NULL`),
+  ],
+);
+
+export const discogsUserItems = pgTable(
+  "discogs_user_items",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id").notNull(),
+    releaseId: text("release_id").notNull(),
+    type: text("type").notNull(),
+    note: text("note"),
+    syncedAt: timestamp("synced_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    uniqueIndex("discogs_user_items_user_release_type_idx").on(
+      t.userId,
+      t.releaseId,
+      t.type,
+    ),
+    index("discogs_user_items_user_idx").on(t.userId),
   ],
 );
 
