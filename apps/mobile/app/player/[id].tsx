@@ -1,4 +1,5 @@
 import { userTracks } from "@aani/db";
+import type { DiscogsMetadata } from "@aani/db";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -16,7 +17,9 @@ import {
   TextInput,
   View,
 } from "react-native";
+import DiscogsSheet from "../../components/DiscogsSheet";
 import PlaylistPickerSheet from "../../components/PlaylistPickerSheet";
+import { apiFetch } from "../../lib/api";
 import { useCurrentTrack } from "../../hooks/useCurrentTrack";
 import { getDb } from "../../lib/db";
 import { isNativeModuleAvailable, getTrackPlayer } from "../../lib/trackPlayer";
@@ -31,7 +34,7 @@ function formatTime(seconds: number): string {
 
 export default function PlayerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { userId } = useAuth();
+  const { userId, getToken } = useAuth();
   const router = useRouter();
 
   const {
@@ -53,6 +56,10 @@ export default function PlayerScreen() {
   const [editingBpm, setEditingBpm] = useState(false);
   const [bpmInput, setBpmInput] = useState("");
   const [pickerTrack, setPickerTrack] = useState<{ id: string; title: string } | null>(null);
+  const [discogsOpen, setDiscogsOpen] = useState(false);
+  const [discogsMeta, setDiscogsMeta] = useState<DiscogsMetadata | null>(null);
+  const [discogsInCollection, setDiscogsInCollection] = useState(false);
+  const [discogsInWantlist, setDiscogsInWantlist] = useState(false);
   const [kbHeight, setKbHeight] = useState(0);
 
   useEffect(() => {
@@ -73,6 +80,30 @@ export default function PlayerScreen() {
   useEffect(() => {
     durationRef.current = duration;
   }, [duration]);
+
+  useEffect(() => {
+    setDiscogsMeta(null);
+    setDiscogsInCollection(false);
+    setDiscogsInWantlist(false);
+    if (!currentTrack?.id) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      if (!token || cancelled) return;
+      const { data } = await apiFetch<{
+        metadata: DiscogsMetadata | null;
+        inCollection: boolean;
+        inWantlist: boolean;
+      }>(`/discogs/track/${currentTrack.id}`, token);
+      if (cancelled || !data) return;
+      setDiscogsMeta(data.metadata);
+      setDiscogsInCollection(data.inCollection);
+      setDiscogsInWantlist(data.inWantlist);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack?.id, getToken]);
 
   useEffect(() => {
     if (!id || !userId) return;
@@ -251,6 +282,27 @@ export default function PlayerScreen() {
         </Pressable>
         <View style={styles.headerActions}>
           <Pressable
+            onPress={() => setDiscogsOpen(true)}
+            hitSlop={12}
+            style={styles.headerBtn}
+          >
+            <Ionicons
+              name={discogsMeta ? "disc" : "disc-outline"}
+              size={26}
+              color="#fff"
+            />
+            {discogsInCollection || discogsInWantlist ? (
+              <View
+                style={[
+                  styles.headerDot,
+                  {
+                    backgroundColor: discogsInCollection ? "#4cd964" : "#ff4d6d",
+                  },
+                ]}
+              />
+            ) : null}
+          </Pressable>
+          <Pressable
             onPress={() => setPickerTrack({ id: currentTrack.id, title: currentTrack.title })}
             hitSlop={12}
             style={styles.headerBtn}
@@ -272,6 +324,20 @@ export default function PlayerScreen() {
         <Text style={styles.title}>{currentTrack.title}</Text>
         {currentTrack.artist ? (
           <Text style={styles.artist}>{currentTrack.artist}</Text>
+        ) : null}
+        {discogsMeta ? (
+          <Text style={styles.discogsLine} numberOfLines={2}>
+            {[
+              discogsMeta.year ? String(discogsMeta.year) : null,
+              discogsMeta.label,
+              discogsMeta.catalogNumber,
+              (discogsMeta.styles ?? discogsMeta.genres ?? [])
+                .slice(0, 2)
+                .join(", ") || null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
         ) : null}
       </View>
 
@@ -469,6 +535,18 @@ export default function PlayerScreen() {
         track={pickerTrack}
         onClose={() => setPickerTrack(null)}
       />
+
+      <DiscogsSheet
+        visible={discogsOpen}
+        trackId={currentTrack.id}
+        defaultQuery={`${currentTrack.artist ?? ""} ${currentTrack.title}`.trim()}
+        onClose={() => setDiscogsOpen(false)}
+        onEnrichmentChange={(d) => {
+          setDiscogsMeta(d.metadata);
+          setDiscogsInCollection(d.inCollection);
+          setDiscogsInWantlist(d.inWantlist);
+        }}
+      />
     </View>
   );
 }
@@ -496,6 +574,22 @@ const styles = StyleSheet.create({
   },
   headerBtn: {
     padding: 4,
+  },
+  headerDot: {
+    position: "absolute",
+    top: 2,
+    right: 2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: "#000",
+  },
+  discogsLine: {
+    color: "#666",
+    fontSize: 12,
+    marginTop: 6,
+    textAlign: "center",
   },
   backArrow: {
     color: "#fff",
