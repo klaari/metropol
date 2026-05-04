@@ -29,6 +29,7 @@ import { eq } from "drizzle-orm";
 import {
   S3Client,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   ListObjectsV2Command,
   type ListObjectsV2CommandOutput,
@@ -37,20 +38,22 @@ import { createDb, tracks } from "@aani/db";
 
 const DRY_RUN = !process.argv.includes("--apply");
 
-function required(name: string): string {
-  const v = process.env[name];
-  if (!v) throw new Error(`Missing env: ${name}`);
-  return v;
+function required(name: string, ...fallbacks: string[]): string {
+  for (const n of [name, ...fallbacks]) {
+    const v = process.env[n];
+    if (v) return v;
+  }
+  throw new Error(`Missing env: ${name}${fallbacks.length ? ` (also tried: ${fallbacks.join(", ")})` : ""}`);
 }
 
 const cfg = {
   endpoint: required("R2_ACCOUNT_ENDPOINT"),
-  accessKey: required("R2_ACCESS_KEY"),
-  secretKey: required("R2_SECRET_KEY"),
+  accessKey: required("R2_ACCESS_KEY", "EXPO_PUBLIC_R2_ACCESS_KEY"),
+  secretKey: required("R2_SECRET_KEY", "EXPO_PUBLIC_R2_SECRET_KEY"),
   oldBucket: required("R2_OLD_BUCKET"),
   newBucket: required("R2_NEW_BUCKET"),
   oldKeyPrefix: process.env.R2_OLD_KEY_PREFIX ?? "",
-  databaseUrl: required("DATABASE_URL"),
+  databaseUrl: required("DATABASE_URL", "EXPO_PUBLIC_DATABASE_URL"),
 };
 
 if (cfg.endpoint.includes(`/${cfg.oldBucket}`) || cfg.endpoint.includes(`/${cfg.newBucket}`)) {
@@ -75,20 +78,15 @@ console.log(
     `  new bucket:  ${cfg.newBucket}\n`,
 );
 
-async function streamToBuffer(stream: AsyncIterable<Uint8Array>): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks);
-}
-
 async function getObject(bucket: string, key: string): Promise<Buffer> {
   const res = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-  return streamToBuffer(res.Body as AsyncIterable<Uint8Array>);
+  const bytes = await res.Body!.transformToByteArray();
+  return Buffer.from(bytes);
 }
 
-async function headObject(bucket: string, key: string): Promise<boolean> {
+async function objectExists(bucket: string, key: string): Promise<boolean> {
   try {
-    await s3.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
+    await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: key }));
     return true;
   } catch {
     return false;
@@ -179,8 +177,7 @@ async function migrateTracks() {
 
       console.log(`  ${row.id}  ${oldKey}  →  ${newKey}`);
       if (!DRY_RUN) {
-        // Skip upload if already in new bucket (resume-safe)
-        const exists = await headObject(cfg.newBucket, newKey);
+        const exists = await objectExists(cfg.newBucket, newKey);
         if (!exists) {
           await putObject(
             cfg.newBucket,
@@ -244,11 +241,18 @@ async function reportOrphans() {
   );
 }
 
-await migrateCookies();
-await migrateTracks();
-await reportOrphans();
+async function main() {
+  await migrateCookies();
+  await migrateTracks();
+  await reportOrphans();
 
-console.log(
-  `\nDone (${DRY_RUN ? "dry-run" : "applied"}). ` +
-    `${DRY_RUN ? "Re-run with --apply to perform the migration." : "Next: apply 0007_dedup_columns_phase2.sql, then update R2_BUCKET / R2_ENDPOINT in .env / Railway / EAS."}`,
-);
+  console.log(
+    `\nDone (${DRY_RUN ? "dry-run" : "applied"}). ` +
+      `${DRY_RUN ? "Re-run with --apply to perform the migration." : "Next: npm run db:apply (will apply 0007_dedup_columns_phase2.sql), then update R2_BUCKET / R2_ENDPOINT in .env / Railway / EAS."}`,
+  );
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

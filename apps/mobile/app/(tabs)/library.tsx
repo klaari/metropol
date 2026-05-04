@@ -411,11 +411,7 @@ export default function LibraryScreen() {
                 const idx = trackList.findIndex((t) => t.id === item.id);
                 usePlayerStore
                   .getState()
-                  .playWithQueue(
-                    trackList.map((t) => t.id),
-                    Math.max(0, idx),
-                    userId,
-                  );
+                  .playWithQueue(trackList, Math.max(0, idx), userId);
               }}
               onLongPress={() => showTrackActions(item)}
             />

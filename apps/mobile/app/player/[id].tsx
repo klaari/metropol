@@ -17,8 +17,10 @@ import {
   View,
 } from "react-native";
 import PlaylistPickerSheet from "../../components/PlaylistPickerSheet";
+import { useCurrentTrack } from "../../hooks/useCurrentTrack";
 import { getDb } from "../../lib/db";
 import { isNativeModuleAvailable, getTrackPlayer } from "../../lib/trackPlayer";
+import { useLibraryStore } from "../../store/library";
 import { usePlayerStore } from "../../store/player";
 
 function formatTime(seconds: number): string {
@@ -35,7 +37,6 @@ export default function PlayerScreen() {
   const {
     queue,
     currentIndex,
-    currentTrack,
     playbackRate,
     playWithQueue,
     skipToIndex,
@@ -46,6 +47,7 @@ export default function PlayerScreen() {
     position,
     duration,
   } = usePlayerStore();
+  const currentTrack = useCurrentTrack();
 
   const [loading, setLoading] = useState(false);
   const [editingBpm, setEditingBpm] = useState(false);
@@ -82,8 +84,11 @@ export default function PlayerScreen() {
       return;
     }
 
+    const cached = useLibraryStore.getState().tracks.find((t) => t.id === id);
+    if (!cached) return;
+
     setLoading(true);
-    playWithQueue([id], 0, userId).finally(() => setLoading(false));
+    playWithQueue([cached], 0, userId).finally(() => setLoading(false));
 
     return () => {
       if (userId) savePosition(userId);
@@ -174,18 +179,20 @@ export default function PlayerScreen() {
 
   async function persistBpm(value: number | null) {
     if (!currentTrack || !userId) return;
+    const trackId = currentTrack.id;
     await getDb()
       .update(userTracks)
       .set({ originalBpm: value })
       .where(
-        and(
-          eq(userTracks.userId, userId),
-          eq(userTracks.trackId, currentTrack.id),
-        ),
+        and(eq(userTracks.userId, userId), eq(userTracks.trackId, trackId)),
       );
-    usePlayerStore.setState({
-      currentTrack: { ...currentTrack, originalBpm: value },
-    });
+    usePlayerStore.setState((s) => ({
+      queue: s.queue.map((q) =>
+        q.trackId === trackId
+          ? { ...q, track: { ...q.track, originalBpm: value } }
+          : q,
+      ),
+    }));
   }
 
   async function scaleBpm(factor: number) {

@@ -1,6 +1,6 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -21,19 +21,132 @@ import {
 import { type QueueItem, usePlayerStore } from "../store/player";
 import PlaylistPickerSheet from "./PlaylistPickerSheet";
 
+interface QueueRowProps {
+  item: QueueItem;
+  idx: number;
+  drag: () => void;
+  isActive: boolean;
+  renderRightActions: () => React.ReactElement;
+  onPress: (idx: number) => void;
+  onMenu: (trackId: string, title: string, idx: number, isCurrent: boolean) => void;
+  onSwipeRemove: (idx: number) => void;
+  onTogglePlayPause: () => void;
+}
+
+const QueueRow = memo(function QueueRow({
+  item,
+  idx,
+  drag,
+  isActive,
+  renderRightActions,
+  onPress,
+  onMenu,
+  onSwipeRemove,
+  onTogglePlayPause,
+}: QueueRowProps) {
+  // Per-row store subscriptions so currentIndex/playing changes only re-render
+  // the two rows that actually flip state (was-current, now-current).
+  const isCurrent = usePlayerStore((s) => s.currentIndex === idx);
+  const isPast = usePlayerStore((s) => idx < s.currentIndex);
+  const playing = usePlayerStore((s) => (s.currentIndex === idx ? s.playing : false));
+  const swipeRef = useRef<Swipeable | null>(null);
+
+  const rowContent = (
+    <View
+      style={[
+        styles.row,
+        isCurrent && styles.rowCurrent,
+        isActive && styles.rowActive,
+        isPast && styles.rowPast,
+      ]}
+    >
+      <View style={styles.iconSlot}>
+        {isCurrent ? (
+          <Pressable
+            onPress={onTogglePlayPause}
+            disabled={isActive}
+            style={styles.iconHit}
+            hitSlop={6}
+          >
+            <Ionicons name={playing ? "pause" : "play"} size={22} color="#fff" />
+          </Pressable>
+        ) : (
+          <TouchableOpacity
+            onLongPress={drag}
+            delayLongPress={150}
+            disabled={isActive}
+            style={styles.iconHit}
+            activeOpacity={0.5}
+          >
+            <Ionicons name="reorder-three" size={22} color={isPast ? "#444" : "#888"} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <Pressable
+        style={styles.info}
+        onPress={() => {
+          if (isCurrent) return;
+          onPress(idx);
+        }}
+        disabled={isActive}
+      >
+        <Text style={[styles.title, isPast && styles.titlePast]} numberOfLines={1}>
+          {item.track.title}
+        </Text>
+        {item.track.artist ? (
+          <Text style={[styles.artist, isPast && styles.artistPast]} numberOfLines={1}>
+            {item.track.artist}
+          </Text>
+        ) : null}
+      </Pressable>
+
+      <View style={styles.iconSlot}>
+        <Pressable
+          hitSlop={10}
+          onPress={() => onMenu(item.trackId, item.track.title, idx, isCurrent)}
+          disabled={isActive}
+          style={styles.iconHit}
+        >
+          <Ionicons name="ellipsis-vertical" size={20} color="#888" />
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  if (isCurrent) {
+    return <ScaleDecorator>{rowContent}</ScaleDecorator>;
+  }
+
+  return (
+    <ScaleDecorator>
+      <Swipeable
+        ref={swipeRef}
+        renderRightActions={renderRightActions}
+        onSwipeableOpen={() => {
+          onSwipeRemove(idx);
+          swipeRef.current?.close();
+        }}
+        rightThreshold={50}
+        overshootRight={false}
+      >
+        {rowContent}
+      </Swipeable>
+    </ScaleDecorator>
+  );
+});
+
 export default function QueueSheet() {
   const { userId } = useAuth();
   const visible = usePlayerStore((s) => s.queueSheetVisible);
   const queue = usePlayerStore((s) => s.queue);
   const currentIndex = usePlayerStore((s) => s.currentIndex);
-  const playing = usePlayerStore((s) => s.playing);
   const setQueueSheetVisible = usePlayerStore((s) => s.setQueueSheetVisible);
   const skipToIndex = usePlayerStore((s) => s.skipToIndex);
   const removeAt = usePlayerStore((s) => s.removeAt);
   const reorder = usePlayerStore((s) => s.reorder);
 
   const listRef = useRef<any>(null);
-  const swipeableRefs = useRef<Map<string, Swipeable>>(new Map());
   const [pickerTrack, setPickerTrack] = useState<{ id: string; title: string } | null>(null);
 
   const handleClose = useCallback(() => setQueueSheetVisible(false), [setQueueSheetVisible]);
@@ -85,101 +198,37 @@ export default function QueueSheet() {
     [],
   );
 
-  const renderItem = useCallback(
-    ({ item, drag, isActive, getIndex }: RenderItemParams<QueueItem>) => {
-      const idx = getIndex() ?? 0;
-      const isCurrent = idx === currentIndex;
-      const isPast = idx < currentIndex;
-      const swipeKey = `${item.trackId}-${idx}`;
-
-      const rowContent = (
-        <View
-          style={[
-            styles.row,
-            isCurrent && styles.rowCurrent,
-            isActive && styles.rowActive,
-            isPast && styles.rowPast,
-          ]}
-        >
-          <View style={styles.iconSlot}>
-            {isCurrent ? (
-              <Pressable
-                onPress={togglePlayPause}
-                disabled={isActive}
-                style={styles.iconHit}
-                hitSlop={6}
-              >
-                <Ionicons name={playing ? "pause" : "play"} size={22} color="#fff" />
-              </Pressable>
-            ) : (
-              <TouchableOpacity
-                onLongPress={drag}
-                delayLongPress={150}
-                disabled={isActive}
-                style={styles.iconHit}
-                activeOpacity={0.5}
-              >
-                <Ionicons name="reorder-three" size={22} color={isPast ? "#444" : "#888"} />
-              </TouchableOpacity>
-            )}
-          </View>
-
-          <Pressable
-            style={styles.info}
-            onPress={() => {
-              if (!userId || isCurrent) return;
-              skipToIndex(idx, userId);
-            }}
-            disabled={isActive}
-          >
-            <Text style={[styles.title, isPast && styles.titlePast]} numberOfLines={1}>
-              {item.track.title}
-            </Text>
-            {item.track.artist ? (
-              <Text style={[styles.artist, isPast && styles.artistPast]} numberOfLines={1}>
-                {item.track.artist}
-              </Text>
-            ) : null}
-          </Pressable>
-
-          <View style={styles.iconSlot}>
-            <Pressable
-              hitSlop={10}
-              onPress={() => showRowMenu(item.trackId, item.track.title, idx, isCurrent)}
-              disabled={isActive}
-              style={styles.iconHit}
-            >
-              <Ionicons name="ellipsis-vertical" size={20} color="#888" />
-            </Pressable>
-          </View>
-        </View>
-      );
-
-      if (isCurrent) {
-        return <ScaleDecorator>{rowContent}</ScaleDecorator>;
-      }
-
-      return (
-        <ScaleDecorator>
-          <Swipeable
-            ref={(ref) => {
-              if (ref) swipeableRefs.current.set(swipeKey, ref);
-              else swipeableRefs.current.delete(swipeKey);
-            }}
-            renderRightActions={renderRightActions}
-            onSwipeableOpen={() => {
-              if (userId) removeAt(idx, userId);
-              swipeableRefs.current.get(swipeKey)?.close();
-            }}
-            rightThreshold={50}
-            overshootRight={false}
-          >
-            {rowContent}
-          </Swipeable>
-        </ScaleDecorator>
-      );
+  const handleRowPress = useCallback(
+    (idx: number) => {
+      if (!userId) return;
+      skipToIndex(idx, userId);
     },
-    [userId, skipToIndex, removeAt, currentIndex, playing, togglePlayPause, renderRightActions, showRowMenu],
+    [userId, skipToIndex],
+  );
+
+  const handleSwipeRemove = useCallback(
+    (idx: number) => {
+      if (!userId) return;
+      removeAt(idx, userId);
+    },
+    [userId, removeAt],
+  );
+
+  const renderItem = useCallback(
+    ({ item, drag, isActive, getIndex }: RenderItemParams<QueueItem>) => (
+      <QueueRow
+        item={item}
+        idx={getIndex() ?? 0}
+        drag={drag}
+        isActive={isActive}
+        renderRightActions={renderRightActions}
+        onPress={handleRowPress}
+        onMenu={showRowMenu}
+        onSwipeRemove={handleSwipeRemove}
+        onTogglePlayPause={togglePlayPause}
+      />
+    ),
+    [renderRightActions, handleRowPress, showRowMenu, handleSwipeRemove, togglePlayPause],
   );
 
   const handleDragEnd = useCallback(

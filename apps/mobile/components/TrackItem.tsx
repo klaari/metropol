@@ -1,4 +1,5 @@
 import type { LibraryTrack } from "@aani/types";
+import { memo } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 function formatDuration(seconds: number | null): string {
@@ -14,11 +15,7 @@ interface TrackItemProps {
   onLongPress: () => void;
 }
 
-export default function TrackItem({
-  track,
-  onPress,
-  onLongPress,
-}: TrackItemProps) {
+function TrackItem({ track, onPress, onLongPress }: TrackItemProps) {
   return (
     <Pressable
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
@@ -42,6 +39,8 @@ export default function TrackItem({
     </Pressable>
   );
 }
+
+export default memo(TrackItem);
 
 const styles = StyleSheet.create({
   container: {

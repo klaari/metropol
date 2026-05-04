@@ -16,7 +16,6 @@ interface PlayerState {
   queue: QueueItem[];
   currentIndex: number;
 
-  currentTrack: Track | null;
   playbackRate: number;
   currentPlaylistId: string | null;
   debugInfo: string;
@@ -28,7 +27,7 @@ interface PlayerState {
 
   initQueue: (userId: string) => Promise<void>;
   togglePlayPause: () => Promise<void>;
-  playWithQueue: (trackIds: string[], startIndex: number, userId: string) => Promise<void>;
+  playWithQueue: (tracks: Track[], startIndex: number, userId: string) => Promise<void>;
   addToQueue: (trackId: string, userId: string) => Promise<void>;
   playNext: (trackId: string, userId: string) => Promise<void>;
   removeAt: (index: number, userId: string) => Promise<void>;
@@ -45,6 +44,32 @@ interface PlayerState {
 }
 
 let pollInterval: ReturnType<typeof setInterval> | null = null;
+
+// During the playWithQueue hot path RNTP's queue is partially populated, so
+// any ActiveTrackChanged event fires with a stale index that would clobber
+// the store's correct currentIndex. Suppress those until the cold-path
+// background fill puts RNTP back in sync.
+let suppressActiveTrackChanged = false;
+let suppressionSafetyTimer: ReturnType<typeof setTimeout> | null = null;
+const SUPPRESSION_SAFETY_MS = 5000;
+
+const QUEUE_WINDOW = 100;
+
+function windowQueue<T>(
+  items: T[],
+  startIndex: number,
+): { items: T[]; startIndex: number } {
+  if (items.length <= QUEUE_WINDOW) return { items, startIndex };
+  const half = Math.floor(QUEUE_WINDOW / 2);
+  const start = Math.max(
+    0,
+    Math.min(items.length - QUEUE_WINDOW, startIndex - half),
+  );
+  return {
+    items: items.slice(start, start + QUEUE_WINDOW),
+    startIndex: startIndex - start,
+  };
+}
 
 // `playing` in the store is intent-driven: it reflects whether the user
 // has asked playback to be active, not what RNTP momentarily reports.
@@ -175,7 +200,6 @@ function schedulePersist(userId: string) {
 export const usePlayerStore = create<PlayerState>((set, get) => ({
   queue: [],
   currentIndex: -1,
-  currentTrack: null,
   playbackRate: 1.0,
   currentPlaylistId: null,
   debugInfo: "",
@@ -234,7 +258,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         await tp.setRate(rate);
         if (pos > 0) await tp.seekTo(pos);
 
-        set({ queue, currentIndex: idx, currentTrack: queue[idx]!.track, playbackRate: rate });
+        set({ queue, currentIndex: idx, playbackRate: rate });
       }
     } catch (e: any) {
       console.warn("[player.initQueue]", e?.message ?? e);
@@ -259,19 +283,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     }
   },
 
-  playWithQueue: async (trackIds, startIndex, userId) => {
-    if (trackIds.length === 0) return;
-    const fetched = await fetchTracks(trackIds, userId);
-    if (fetched.length === 0) return;
-    const queue: QueueItem[] = fetched.map((t) => ({ trackId: t.id, track: t }));
-    const idx = Math.max(0, Math.min(queue.length - 1, startIndex));
+  playWithQueue: async (tracksList, startIndex, userId) => {
+    if (tracksList.length === 0) return;
+    const windowed = windowQueue(tracksList, Math.max(0, startIndex));
+    const queue: QueueItem[] = windowed.items.map((t) => ({ trackId: t.id, track: t }));
+    if (queue.length === 0) return;
+    const idx = Math.max(0, Math.min(queue.length - 1, windowed.startIndex));
 
-    // Set play intent immediately so the mini-player snaps to the new
-    // track and the icon shows "pause" while RNTP is still loading.
     set({
       queue,
       currentIndex: idx,
-      currentTrack: queue[idx]!.track,
       playing: true,
       position: 0,
       duration: queue[idx]!.track.duration ?? 0,
@@ -287,6 +308,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     // Hot path: reset the queue, add ONLY the starting track, kick off play.
     // Saves us from waiting on URL-signing / file-existence checks for the
     // rest of the queue before audio starts.
+    suppressActiveTrackChanged = true;
+    if (suppressionSafetyTimer) clearTimeout(suppressionSafetyTimer);
+    // Safety net: if the cold path hangs, never leave suppression on forever.
+    suppressionSafetyTimer = setTimeout(() => {
+      suppressActiveTrackChanged = false;
+      suppressionSafetyTimer = null;
+    }, SUPPRESSION_SAFETY_MS);
     await tp.reset();
     await tp.add(rntpStart);
     void tp.play();
@@ -314,20 +342,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       try {
         const before = queue.slice(0, idx);
         const after = queue.slice(idx + 1);
-        if (before.length > 0) {
-          const rntpBefore = await Promise.all(
-            before.map((q) => buildRntpTrack(q.track)),
-          );
-          await tp.add(rntpBefore, 0);
-        }
-        if (after.length > 0) {
-          const rntpAfter = await Promise.all(
-            after.map((q) => buildRntpTrack(q.track)),
-          );
-          await tp.add(rntpAfter);
-        }
+        const [rntpBefore, rntpAfter] = await Promise.all([
+          Promise.all(before.map((q) => buildRntpTrack(q.track))),
+          Promise.all(after.map((q) => buildRntpTrack(q.track))),
+        ]);
+        if (rntpBefore.length > 0) await tp.add(rntpBefore, 0);
+        if (rntpAfter.length > 0) await tp.add(rntpAfter);
       } catch (e: any) {
         console.warn("[player.playWithQueue] background fill:", e?.message ?? e);
+      } finally {
+        suppressActiveTrackChanged = false;
+        if (suppressionSafetyTimer) {
+          clearTimeout(suppressionSafetyTimer);
+          suppressionSafetyTimer = null;
+        }
       }
     });
   },
@@ -383,11 +411,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
     }
 
-    set({
-      queue: newQueue,
-      currentIndex: newIndex,
-      currentTrack: newIndex >= 0 ? newQueue[newIndex]!.track : null,
-    });
+    set({ queue: newQueue, currentIndex: newIndex });
     schedulePersist(userId);
   },
 
@@ -398,7 +422,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     set({
       currentIndex: index,
-      currentTrack: queue[index]!.track,
       playing: true,
       position: 0,
       duration: queue[index]!.track.duration ?? 0,
@@ -438,22 +461,16 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       }
     }
 
-    set({
-      queue: next,
-      currentIndex: newIndex,
-      currentTrack: newIndex >= 0 ? next[newIndex]!.track : null,
-    });
+    set({ queue: next, currentIndex: newIndex });
     schedulePersist(userId);
   },
 
   onActiveTrackChanged: (newIndex) => {
+    if (suppressActiveTrackChanged) return;
     const { queue, currentIndex } = get();
     if (newIndex < 0 || newIndex >= queue.length) return;
     if (newIndex === currentIndex) return;
-    set({
-      currentIndex: newIndex,
-      currentTrack: queue[newIndex]!.track,
-    });
+    set({ currentIndex: newIndex });
   },
 
   onQueueEnded: () => {
@@ -465,22 +482,25 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     if (tp) await tp.setRate(rate);
     set({ playbackRate: rate });
 
-    const { currentTrack } = get();
-    if (!currentTrack) return;
+    const { queue, currentIndex } = get();
+    const trackId = queue[currentIndex]?.trackId;
+    if (!trackId) return;
 
     if (saveDebounce) clearTimeout(saveDebounce);
     saveDebounce = setTimeout(() => {
-      upsertPlaybackState(userId, currentTrack.id, { playbackRate: rate });
+      upsertPlaybackState(userId, trackId, { playbackRate: rate });
     }, 500);
   },
 
   savePosition: async (userId) => {
     const tp = getTrackPlayer();
-    const { currentTrack } = get();
-    if (!currentTrack || !tp) return;
+    if (!tp) return;
+    const { queue, currentIndex } = get();
+    const trackId = queue[currentIndex]?.trackId;
+    if (!trackId) return;
 
     const { position } = await tp.getProgress();
-    await upsertPlaybackState(userId, currentTrack.id, {
+    await upsertPlaybackState(userId, trackId, {
       lastPosition: Math.floor(position),
     });
   },
@@ -497,7 +517,6 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     set({
       queue: [],
       currentIndex: -1,
-      currentTrack: null,
       playbackRate: 1.0,
       currentPlaylistId: null,
       initialized: false,

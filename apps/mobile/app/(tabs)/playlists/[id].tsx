@@ -52,16 +52,11 @@ export default function PlaylistDetailScreen() {
 
   function handleTrackPress(trackId: string) {
     if (id) setPlaylistContext(id);
-    if (userId) {
-      const idx = tracks.findIndex((t) => t.id === trackId);
-      usePlayerStore
-        .getState()
-        .playWithQueue(
-          tracks.map((t) => t.id),
-          Math.max(0, idx),
-          userId,
-        );
-    }
+    if (!userId) return;
+    const idx = tracks.findIndex((t) => t.id === trackId);
+    usePlayerStore
+      .getState()
+      .playWithQueue(tracks, Math.max(0, idx), userId);
   }
 
   async function handleRemove(item: PlaylistTrackItem) {

@@ -71,6 +71,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           userTrackId: userTracks.id,
           addedAt: userTracks.addedAt,
           originalBpm: userTracks.originalBpm,
+          localUri: userTracks.localUri,
         })
         .from(userTracks)
         .innerJoin(tracks, eq(userTracks.trackId, tracks.id))

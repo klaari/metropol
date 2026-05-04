@@ -3,6 +3,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCurrentTrack } from "../hooks/useCurrentTrack";
 import { usePlayerStore } from "../store/player";
 
 const TEMPO_AUTO_CLOSE_MS = 3500;
@@ -10,7 +11,7 @@ const TEMPO_AUTO_CLOSE_MS = 3500;
 export default function MiniPlayer() {
   const router = useRouter();
   const { userId } = useAuth();
-  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const currentTrack = useCurrentTrack();
   const playing = usePlayerStore((s) => s.playing);
   const position = usePlayerStore((s) => s.position);
   const duration = usePlayerStore((s) => s.duration);
