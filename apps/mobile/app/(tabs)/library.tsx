@@ -109,6 +109,7 @@ export default function LibraryScreen() {
   const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [creatingPlaylist, setCreatingPlaylist] = useState(false);
+  const [search, setSearch] = useState("");
 
   const {
     playlists: playlistList,
@@ -336,15 +337,25 @@ export default function LibraryScreen() {
     }
   }
 
+  const filteredTracks = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return trackList;
+    return trackList.filter((t) => {
+      const title = t.title?.toLowerCase() ?? "";
+      const artist = t.artist?.toLowerCase() ?? "";
+      return title.includes(q) || artist.includes(q);
+    });
+  }, [trackList, search]);
+
   const sections = useMemo(() => {
-    if (sort !== "date") return [{ title: "", data: trackList }];
+    if (sort !== "date") return [{ title: "", data: filteredTracks }];
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(today.getTime() - 7 * 86400000);
 
     const groups: Record<string, LibraryTrack[]> = {};
     const order: string[] = [];
-    for (const track of trackList) {
+    for (const track of filteredTracks) {
       const added = new Date(track.addedAt);
       let label: string;
       if (added >= today) label = "Today";
@@ -358,10 +369,11 @@ export default function LibraryScreen() {
       groups[label]!.push(track);
     }
     return order.map((title) => ({ title, data: groups[title]! }));
-  }, [trackList, sort]);
+  }, [filteredTracks, sort]);
 
   const trackCount = trackList.length;
   const trackCountLabel = trackCount === 1 ? "1 track" : `${trackCount} tracks`;
+  const isSearching = search.trim().length > 0;
 
   return (
     <View style={styles.container}>
@@ -381,6 +393,31 @@ export default function LibraryScreen() {
         </Pressable>
       </View>
 
+      {trackList.length > 0 && (
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search title or artist…"
+            placeholderTextColor="#555"
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            clearButtonMode="while-editing"
+          />
+          {isSearching && Platform.OS !== "ios" && (
+            <Pressable
+              style={styles.searchClear}
+              onPress={() => setSearch("")}
+              android_ripple={{ color: "rgba(255,255,255,0.1)", borderless: true }}
+            >
+              <Text style={styles.searchClearText}>×</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
       {isLoading ? (
         <View style={styles.center}>
           <ActivityIndicator color="#fff" size="large" />
@@ -390,6 +427,13 @@ export default function LibraryScreen() {
           <Text style={styles.emptyText}>No tracks yet</Text>
           <Text style={styles.emptySubtext}>
             Tap "Add track" to import audio files
+          </Text>
+        </View>
+      ) : filteredTracks.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={styles.emptyText}>No matches</Text>
+          <Text style={styles.emptySubtext}>
+            Nothing matches "{search.trim()}"
           </Text>
         </View>
       ) : (
@@ -548,6 +592,36 @@ const styles = StyleSheet.create({
     color: "#999",
     fontSize: 13,
     fontWeight: "500",
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  searchInput: {
+    flex: 1,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: "#fff",
+    borderWidth: 1,
+    borderColor: "#222",
+  },
+  searchClear: {
+    marginLeft: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  searchClearText: {
+    color: "#888",
+    fontSize: 22,
+    lineHeight: 24,
   },
   sectionHeader: {
     paddingHorizontal: 16,
