@@ -1,97 +1,98 @@
 # Aani TODO
 
-## 🔮 Myöhemmin: Share Extension (iOS + Android)
+## 🔮 Later: Share Extension (iOS + Android)
 
-**Prioriteetti:** Matala (tulevaisuus)  
-**Kuvaus:**  
-Native share extension joka mahdollistaa YouTube-urlin jakamisen suoraan selaimesta tai YouTube-appista Aaniin ilman sovelluksen avaamista.
+**Priority:** Low (future)
+**Description:**
+Native share extension that lets you share a YouTube URL straight from the
+browser or YouTube app into Aani without opening the app first.
 
-**Työnkulku:**
-1. Selaimessa tai YouTubessa → "Jaa" → valitse Aani
-2. Extension käynnistyy taustalla, lähettää urlin API:lle
-3. Lataus alkaa taustalla, sovellusta ei tarvitse avata
+**Flow:**
+1. In the browser or YouTube → "Share" → pick Aani
+2. Extension runs in the background and posts the URL to the API
+3. Download starts in the background; the app doesn't need to be opened
 
-**Tekniset huomiot:**
-- iOS: App Extension (Share Extension) — vaatii Expo bare workflow tai custom native module
-- Android: Intent filter + background task
-- Vaatii todennäköisesti Expo managed workflowsta luopumista tai EAS custom build targetia
-- Harkitse kun clipboard-flow on tehty ja testattu
-
----
-
-## 🔜 Tehtävä: Haun jatkokehitys
-
-**Prioriteetti:** Keskitaso
-**Kuvaus:**
-Library-haku perusversio toimitettu. Jatkokehitys:
-- Suodattimet: BPM-haarukka, key, genre, label, vuosi
-- Lajittelu: viimeksi soitettu, lisätty, BPM
-- Globaali haku (kirjasto + Discogs samalla kertaa)
-- Etsi sopiva seuraava biisi nykyisestä BPM-haarukasta (mixin-pohja)
+**Technical notes:**
+- iOS: App Extension (Share Extension) — needs Expo bare workflow or a custom native module
+- Android: intent filter + background task
+- Likely requires leaving Expo managed workflow or using an EAS custom build target
+- Revisit once the clipboard flow is shipped and validated
 
 ---
 
-## 🔜 Tehtävä: Downbeat-tunnistus
+## 🔜 Task: Search — follow-up work
 
-**Prioriteetti:** Keskitaso
-**Kuvaus:**
-Tunnista kappaleen downbeatit (tahdin ykkösiskut) jotta voidaan myöhemmin
-rakentaa mixin-ominaisuuksia: beatmatch, kahden raidan synkronointi,
-auto-cue downbeatille, loop-pisteet, transition-efektit.
-
-**Tulevat mixin-käyttötapaukset (motivaatio):**
-- Beatmatch: kahden kappaleen tahti synkkaan automaattisesti
-- Auto-cue: hyppy seuraavan downbeatin kohdalle
-- Loop: 4/8/16 tahdin loopit downbeat-rajoilla
-- Crossfade: vaihda kappaletta tahdin ykkösellä
-
-**Tekniset huomiot:**
-- Pelkkä BPM ei riitä — tarvitaan tahdin alkukohta (phase / first downbeat offset)
-- Vaihtoehdot:
-  1. Server-side analyysi ingestissä (esim. `essentia`, `madmom`, `librosa`)
-     — tallenna `downbeats: number[]` (sekunteina) `tracks`-tauluun
-  2. Client-side analyysi natiivilla moduulilla (raskasta mobiilissa)
-  3. Käyttäjän manuaalinen tap-tempo + ensimmäisen downbeatin merkkaus
-- Aloita serveripuolen analyysillä Phase 2:n yt-dlp-pipelinen yhteydessä
-- Skeema: lisää `firstDownbeatMs` ja/tai `downbeats` JSONB `tracks`-tauluun
-
-**Vaiheistus:**
-1. Schema + tallennus (downbeat array per track)
-2. Visualisointi player-näkymässä (esim. waveformin päällä merkit)
-3. Auto-cue / loop -toiminnot
-4. Beatmatch kahden raidan välillä (vaatii dual-deck UI:n)
+**Priority:** Medium
+**Description:**
+Library search v1 is shipped. Follow-up:
+- Filters: BPM range, key, genre, label, year
+- Sort options: recently played, recently added, BPM
+- Global search (library + Discogs in one input)
+- "Find a compatible next track from the current BPM range" (mixing groundwork)
 
 ---
 
-## 🔜 Tehtävä: Discogs-mirror (paikallinen kokoelman + wantlistin synkka)
+## 🔜 Task: Downbeat detection
 
-**Prioriteetti:** Korkea
-**Kuvaus:**
-Sync collection + wantlist Discogsista paikalliseen Postgres-tauluun
-jotta voidaan tehdä nopeaa hakua, scope-pohjaista matchausta ja
-selausta ilman jatkuvaa Discogs API:n kuormittamista.
+**Priority:** Medium
+**Description:**
+Detect the downbeats (the "1" of each bar) so we can later build mixing
+features: beatmatch, two-deck sync, auto-cue to next downbeat, loop
+boundaries, transition effects.
 
-**Miksi tämä ennen auto-matchausta tai selainta:**
-- Discogsin `database/search?q=...` palauttaa max 25 osumaa per kysely
-  ja perustuu sen omaan ranking-algoritmiin → "filter by `user_data`"
-  ei ole exhaustive (jos oikeaa releasea ei tule top-25:een, scope-haku
-  palauttaa tyhjän vaikka levy on collectionissa).
-- Discogsin verkkosivun "Export to CSV" -nappi EI ole API-rajapinnan
-  takana (lähettää sähköpostilinkin, ei triggeröitävissä).
-- Sen sijaan API tarjoaa saman datan paginoituna:
-  `GET /users/{u}/collection/folders/0/releases?per_page=100&page=N`
-  ja `GET /users/{u}/wants?per_page=100&page=N`.
-  `basic_information`-blokki sisältää valmiiksi artisti/title/label/
-  catno/year/format/thumb → ei tarvita per-release follow-up callejä.
-- Vrt. https://github.com/fscm/discogs2xlsx — sama lähestymistapa,
-  paginoi API:n läpi ja kirjoittaa xlsx:ään.
+**Future mixing use cases (motivation):**
+- Beatmatch: align two tracks' bars automatically
+- Auto-cue: jump to the next downbeat
+- Loop: 4 / 8 / 16-bar loops snapped to downbeats
+- Crossfade: switch tracks on the "1"
 
-**Aikamääre:** kair tilillä 6291 + 3055 = 9346 kohdetta → 94 requestiä
-(100/page) → ~95 sekuntia 60 req/min limitin alla. Kerran-jobi, ei
-request-handleri.
+**Technical notes:**
+- BPM alone isn't enough — we need the phase (first-downbeat offset)
+- Options:
+  1. Server-side analysis at ingest (e.g. `essentia`, `madmom`, `librosa`),
+     store `downbeats: number[]` (seconds) on the `tracks` row
+  2. Client-side analysis via a native module (heavy on mobile)
+  3. Manual: user tap-tempo + a "mark first downbeat" gesture
+- Start with server-side analysis as part of the Phase 2 yt-dlp pipeline
+- Schema: add `firstDownbeatMs` and/or a `downbeats` JSONB column to `tracks`
 
-**Skeema:** korvaa nykyinen `discogs_user_items`-taulu rikkaammalla
-versiolla (nykyinen on strict subset):
+**Phasing:**
+1. Schema + storage (downbeat array per track)
+2. Visualization in the player (e.g. tick marks over a waveform)
+3. Auto-cue / loop actions
+4. Beatmatch between two decks (needs a dual-deck UI)
+
+---
+
+## 🔜 Task: Discogs mirror (local sync of collection + wantlist)
+
+**Priority:** High
+**Description:**
+Sync collection + wantlist from Discogs into a local Postgres table so we
+can do fast search, scope-filtered matching, and browsing without
+hammering the Discogs API on every request.
+
+**Why this comes before auto-matching or the browser:**
+- Discogs's `database/search?q=...` returns at most 25 hits per query and
+  uses its own ranking. "Filter the response by `user_data`" is not
+  exhaustive: if the right release isn't in the top 25, scope-filtered
+  search returns empty even though you own it.
+- The website's "Export to CSV" button is **not** API-accessible — it
+  emails a link, can't be triggered programmatically.
+- The same data is fully exposed via the regular paginated endpoints:
+  `GET /users/{u}/collection/folders/0/releases?per_page=100&page=N` and
+  `GET /users/{u}/wants?per_page=100&page=N`. Each item carries a
+  `basic_information` block with artist / title / label / catno / year /
+  format / thumb already populated — no per-release follow-up calls.
+- See https://github.com/fscm/discogs2xlsx — same approach: paginate
+  through the API and write the result to xlsx. We'd write to Postgres.
+
+**Cost:** for the `kair` account, 6291 + 3055 = 9346 items → 94 requests
+(at 100/page) → ~95 s under the 60 req/min ceiling. One-time job, not a
+request handler.
+
+**Schema:** replace the current `discogs_user_items` table with a richer
+version (the current table is a strict subset):
 
 ```sql
 CREATE TABLE discogs_user_releases (
@@ -111,7 +112,7 @@ CREATE TABLE discogs_user_releases (
   instance_id     INTEGER,                -- collection only
   notes           TEXT,                   -- wantlist note from Discogs
   search_text     TEXT,                   -- "artist title label catno year"
-  raw             JSONB,                  -- koko Discogs-rivi tulevaa varten
+  raw             JSONB,                  -- full Discogs row, for future fields
   synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE UNIQUE INDEX ON discogs_user_releases (user_id, release_id, type);
@@ -120,147 +121,147 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE INDEX ON discogs_user_releases USING gin (search_text gin_trgm_ops);
 ```
 
-**API-pinta:**
-- `POST /discogs/sync` — täysi sync API:n kautta, idempotentti.
-  Palauttaa `{ collection: 6291, wantlist: 3055, durationMs }`.
+**API surface:**
+- `POST /discogs/sync` — full sync via API, idempotent.
+  Returns `{ collection: 6291, wantlist: 3055, durationMs }`.
 - `GET /discogs/local-search?q=...&scope=collection|wantlist|any&limit=10`
-  — trigram-rankattu paikallinen haku, sub-ms vasteaika.
-- `POST /discogs/auto-match` body `{ trackId, scope }` — käyttää
-  local-searchia; jos täsmälleen 1 osuma → enrich + palauta. Muutoin
-  palauta candidate-lista pikkupickeriä varten.
+  — trigram-ranked local search, sub-millisecond response.
+- `POST /discogs/auto-match` body `{ trackId, scope }` — runs local search
+  internally; if exactly one hit → enrich and return. Otherwise return a
+  candidate list for a small picker.
 
-**Lib-helperit** (`apps/api/src/lib/discogs.ts`):
-- `paginateUserList(endpoint, username)` async generator
-- `syncCollection(userId)` / `syncWantlist(userId)` consume the generator
-- 429-handlauttaminen: nuku `X-Discogs-Ratelimit-Remaining`-headerin
-  perusteella tai 60s 429:n jälkeen (ks. discogs2xlsx:n malli).
+**Lib helpers** (`apps/api/src/lib/discogs.ts`):
+- `paginateUserList(endpoint, username)` — async generator
+- `syncCollection(userId)` / `syncWantlist(userId)` — consume the generator
+- 429 handling: sleep based on the `X-Discogs-Ratelimit-Remaining` header
+  or 60 s after a 429 (mirror the discogs2xlsx approach).
 
-**Sync-triggerit** (kasvavalla aggressiivisuudella):
-1. **App-foreground sync** — inkrementaali aina kun mobiili tulee
-   foregroundiin. Discogs sortaa `added desc` → lopeta paging kun
-   törmätään `date_added`-kenttään joka on jo paikallisesti → tyypillinen
-   inkrementaali = 1–2 requestiä.
-2. **Push-on-write** — kun appi itse mutatoi (POST/DELETE collection
-   tai wantlist), upsert paikallisesti samassa handlerissä. Nykyinen
-   `syncMembership` tekee tämän jo ohuesti — laajenna koko riville.
-3. **Nightly background full sync** — Railway cron osuu
-   `POST /discogs/sync` kerran päivässä. Kattaa muutokset jotka
-   tehtiin suoraan discogs.com:issa.
+**Sync triggers** (in order of aggressiveness):
+1. **App-foreground sync** — incremental sync whenever mobile foregrounds.
+   Discogs sorts `added desc` → stop paging once we hit a `date_added` we
+   already have locally → typical incremental = 1–2 requests.
+2. **Push-on-write** — when the app itself mutates collection/wantlist
+   (POST/DELETE), upsert locally in the same handler. Today's
+   `syncMembership` does this thinly — extend it to write the full row.
+3. **Nightly background full sync** — Railway cron hits `POST /discogs/sync`
+   once a day. Catches changes made directly on discogs.com.
 
-**Vaiheistus:**
-1. Skeema + migraatio + nykyisen `discogs_user_items`-taulun korvaaminen
+**Phasing:**
+1. Schema + migration + replace the existing `discogs_user_items` table
 2. `paginateUserList` + `syncCollection` + `syncWantlist`
-3. `POST /discogs/sync` route + progress event WS-kanavalla
-4. Sync-nappi Settings-näkymään (manuaalinen trigger + progress)
-5. `local-search` route + paikallinen rikkaampi search UI
-6. App-foreground inkrementaali
-7. Auto-match endpoint + ingest-pohjainen "tämä on collectionissa /
-   wantlistissa / muu" -pikkupromptti download-jälkeen
+3. `POST /discogs/sync` route + progress events over the WS channel
+4. Sync button in Settings (manual trigger + progress UI)
+5. `local-search` route + a richer local search UI
+6. App-foreground incremental sync
+7. Auto-match endpoint + post-download "in collection / wantlist / other"
+   prompt at ingest time
 
 ---
 
-## 🔜 Tehtävä: Discogs-rikastuksen jatko
+## 🔜 Task: Discogs enrichment — follow-up work
 
-**Prioriteetti:** Keskitaso
-**Riippuvuudet:** Discogs-mirror (yllä) parantaa auto-matchin
-luotettavuutta merkittävästi.
-**Kuvaus:**
-Manuaalinen Discogs-rikastus toimitettu (search → match → enrich +
-collection/wantlist togglet + notes). Jäljellä:
+**Priority:** Medium
+**Depends on:** Discogs mirror (above) — auto-match becomes meaningfully
+more reliable with a local index.
+**Description:**
+Manual Discogs enrichment is shipped (search → match → enrich +
+collection/wantlist toggles + notes). Remaining:
 
-- Library-näkymässä badget collection/wantlist -tilasta (haku tracks-
-  taulun JOIN discogs_user_releases kautta)
-- Library-haku huomioi Discogs-metadatan (label, catalog#, year, genre)
-- Cover-art player-näkymässä jos `discogsMetadata.coverUrl` löytyy
-- Auto-match ingestin yhteydessä — siirtyy mirror-taskiin (tarvitsee
-  paikallisen indeksin toimiakseen luotettavasti)
+- Library list shows collection / wantlist badges (JOIN tracks against
+  `discogs_user_releases`)
+- Library search considers Discogs metadata (label, catalog#, year, genre)
+- Cover art on the player screen when `discogsMetadata.coverUrl` is set
+- Auto-match at ingest — moved into the mirror task (needs the local
+  index to work reliably)
 
 ---
 
-## 🔮 Myöhemmin: Discogs-integraatio (räätälöity selain)
+## 🔮 Later: Discogs integration (custom in-app browser)
 
-**Prioriteetti:** Korkea (myöhemmin)  
-**Kuvaus:**  
-Täysimittainen Discogs-selain appin sisällä. Muuttaa Aanin luonteen download-työkalusta Discogs-integroiduksi musiikkikirjastoksi.
+**Priority:** High (later)
+**Description:**
+A full Discogs browser inside the app. Shifts Aani from a download tool
+into a Discogs-integrated music library.
 
-### Ominaisuudet
+### Features
 
-**Haku & selaus**
-- Release-haku nimellä, artistilla, labelilla, kataloginumerolla
-- Hakutuloksissa: kansi, artisti, levy, vuosi, formaatti
-- Release-sivu: tracklist, YouTube-linkit, notes, versiot
+**Search & browse**
+- Release search by name, artist, label, catalog number
+- Result rows: cover, artist, release, year, format
+- Release page: tracklist, YouTube links, notes, versions
 
-**Lataus Discogsin kautta**
-- YouTube-linkit näkyvät suoraan release-sivulla
-- Yksi tap → lataus alkaa, metadata (artisti, nimi, kansi, vuosi) tulee automaattisesti Discogsilta
-- Fallback clipboard/YouTube-haku jos linkkiä ei löydy
+**Download via Discogs**
+- YouTube links surface directly on the release page
+- One tap → download starts; metadata (artist, title, cover, year) comes
+  from Discogs automatically
+- Fallback to clipboard / YouTube search if no link is present
 
 **Collection & Wantlist**
-- Oma levy-kokoelma selattavissa ja hakettavissa
-- Wantlist — selaa mitä haluat, lataa previewt tai täydet biisit
-- Merkintä mitä on jo ladattu Aaniin
+- Browse and search your own record collection
+- Wantlist — browse what you want, download previews or full tracks
+- Mark which releases you've already downloaded into Aani
 
-**Autentikointi**
-- Discogs OAuth 1.0a — kirjautuminen omalla Discogs-tilillä
-- Mahdollistaa collection + wantlist + rating-toiminnot
+**Auth**
+- Discogs OAuth 1.0a — sign in with your Discogs account
+- Enables collection + wantlist + rating actions
 
-### Tekniset huomiot
-- Discogs API: ilmainen, 60 req/min autentikoituneena
-- OAuth 1.0a vaatii oman backendin token-vaihtoon (lisätään API:lle)
-- Kannet CDN:stä (api.discogs.com/images/...)
-- YouTube-linkit Discogs `videos`-kentässä per release
+### Technical notes
+- Discogs API: free, 60 req/min authenticated
+- OAuth 1.0a needs a backend token-exchange endpoint (added to `apps/api`)
+- Covers come from the Discogs CDN (`api.discogs.com/images/...`)
+- YouTube links live in the Discogs `videos` field per release
 
-### Vaiheistus ehdotus
-1. Haku + release-sivu + YouTube-lataus (ei authia)
-2. Discogs OAuth + collection-selaus
-3. Wantlist + hallinta (lisää/poista)
+### Suggested phasing
+1. Search + release page + YouTube download (no auth)
+2. Discogs OAuth + collection browsing
+3. Wantlist + management (add / remove)
 
 ---
 
-## 🔮 Myöhemmin: React Native New Architecture -migraatio
+## 🔮 Later: React Native New Architecture migration
 
-**Prioriteetti:** Matala (tulevaisuus)
-**Kuvaus:**
-Sovellus pyörii nyt Legacy Architecturella (`apps/mobile/app.json:
-"newArchEnabled": false`). RN varoittaa että legacy poistuu tulevassa
-versiossa, joten siirtyminen Fabric/TurboModules-arkkitehtuuriin pitää
-tehdä joskus.
+**Priority:** Low (future)
+**Description:**
+The app currently runs on Legacy Architecture (`apps/mobile/app.json`:
+`"newArchEnabled": false`). RN warns that legacy will be removed in a
+future version, so we'll have to migrate to Fabric / TurboModules at some
+point.
 
-**Miksi nyt legacy:**
-- `react-native-track-player` 4.1.2 laajentaa `ReactContextBaseJavaModule`
-  -luokkaa (old-arch only) → uudessa arkkitehtuurissa moduuli ei
-  rekisteröidy TurboModuleksi, ja player ilmoittaa "audio playback not
-  available".
-- Aiempia yrityksiä on revertoitu kolme kertaa (commits `75952a5`,
-  `f7d02b5`, `fd09300` → revertit `7f12c47` ja kumppanit).
+**Why we're on legacy now:**
+- `react-native-track-player` 4.1.2 extends `ReactContextBaseJavaModule`
+  (old-arch only). On New Architecture the module fails to register as
+  a TurboModule and the player reports "audio playback not available."
+- Three previous attempts have been reverted (commits `75952a5`,
+  `f7d02b5`, `fd09300` → reverts `7f12c47` and friends).
 
-**Vaihtoehdot kun aika on:**
-1. Odota RNTP v5 stabiilia uuden arkkitehtuurin tuella (siistein).
-2. Kokeile RNTP v5-alphaa uudelleen — kehitys on edennyt edellisestä
-   yrityksestä.
-3. Korvaa RNTP `expo-audio` + custom service -yhdistelmällä. Uusi-arch
-   natiivi mutta menettää lock-screen kontrollit, jonon ja
-   notifikaatiointegraation → pitää rakentaa uudelleen.
+**Options when the time comes:**
+1. Wait for RNTP v5 stable with New Architecture support (cleanest).
+2. Try the RNTP v5 alpha again — development has progressed since the
+   last attempt.
+3. Replace RNTP with `expo-audio` + a custom service. Native-on-new-arch
+   but loses lock-screen controls, queue, and notification integration —
+   we'd need to rebuild those.
 
 **Trigger:**
-- RNTP julkaisee v5 stable, TAI
-- RN ilmoittaa konkreettisen poistoaikataulun legacylle.
+- RNTP ships v5 stable, OR
+- RN announces a concrete removal timeline for legacy.
 
 ---
 
-## ✅ Tehty
+## ✅ Done
 
-- **Web-sovellus (Next.js)** — `apps/web/` Turboreposessa. Clerk-auth,
-  library / playlists / downloads / settings -reitit, sama API kuin
-  mobiilissa. Deploy: Vercel.
-- **Library-haku** — TextInput Library-välilehden yläosassa, suodattaa
-  title + artist mukaan. Tyhjän tilan ja ei-tulosten erottelu.
-- **"+ nappi" pikalisäys** — Downloads-välilehden aina näkyvä URL-bar
-  korvattu "+" napilla joka esitäyttää YouTube-urlin leikepöydältä
-  validoiden. Cancel-napilla pois.
-- **Discogs-rikastus (manuaalinen)** — Player-näkymästä disc-ikoni
-  avaa sheetin: search → match → enrich. Genres/styles/year/label/cat#/
-  cover tallennetaan jsonb-kenttänä `tracks.discogsMetadata`. Per-track
-  collection/wantlist togglet kirjautuvat sekä Discogsiin että
-  paikalliseen `discogs_user_items`-tauluun, jossa myös notes-kenttä.
-  Header-piste signaloi tilan: vihreä = collection, punainen = wantlist.
+- **Web app (Next.js)** — `apps/web/` in the Turborepo. Clerk auth, with
+  library / playlists / downloads / settings routes, hitting the same API
+  as mobile. Deploy: Vercel.
+- **Library search** — TextInput at the top of the Library tab, filters
+  by title + artist. Distinguishes empty-library from no-search-results.
+- **Clipboard "+" quick-add** — replaced the always-visible URL bar on
+  Downloads with a "+" button. Pre-fills the input from the clipboard if
+  the contents look like a YouTube URL. Cancel button collapses.
+- **Discogs enrichment (manual)** — disc icon on the player screen opens
+  a sheet: search → match → enrich. Genres/styles/year/label/cat#/cover
+  are persisted as jsonb in `tracks.discogs_metadata`. Per-track
+  collection/wantlist toggles write to both Discogs and a local
+  `discogs_user_items` membership cache. Wantlist note round-trips
+  through Discogs's own notes field. Header dot signals state: green =
+  collection, red = wantlist.
