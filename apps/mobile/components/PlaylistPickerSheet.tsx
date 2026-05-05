@@ -8,14 +8,24 @@ import {
   Keyboard,
   Modal,
   Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
   ToastAndroid,
   View,
 } from "react-native";
 import { usePlaylistsStore } from "../store/playlists";
+import {
+  Button,
+  Divider,
+  HStack,
+  IconButton,
+  Input,
+  Pressable,
+  Surface,
+  Text,
+  VStack,
+  palette,
+  radius,
+  space,
+} from "./ui";
 
 interface Props {
   visible: boolean;
@@ -96,195 +106,109 @@ export default function PlaylistPickerSheet({ visible, track, onClose }: Props) 
       transparent
       onRequestClose={close}
     >
-      <Pressable style={styles.backdrop} onPress={close} />
-      <View style={[styles.sheet, { bottom: kbHeight }]}>
-        <View style={styles.handle} />
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Add to playlist</Text>
-          <Pressable onPress={close} hitSlop={10}>
-            <Ionicons name="close" size={24} color="#fff" />
-          </Pressable>
-        </View>
+      <Pressable
+        flat
+        style={{ flex: 1, backgroundColor: "rgba(22,19,14,0.45)" }}
+        onPress={close}
+      />
+      <Surface
+        tone="raised"
+        lift="sheet"
+        rounded="xl"
+        pad="md"
+        style={{
+          position: "absolute",
+          bottom: kbHeight,
+          left: 0,
+          right: 0,
+          maxHeight: "70%",
+          minHeight: "30%",
+        }}
+      >
+        <VStack gap="md">
+          <View
+            style={{
+              alignSelf: "center",
+              width: 40,
+              height: 4,
+              borderRadius: radius.full,
+              backgroundColor: palette.paperEdge,
+            }}
+          />
+          <HStack justify="between">
+            <Text variant="title">Add to playlist</Text>
+            <IconButton icon="close" accessibilityLabel="Close" onPress={close} />
+          </HStack>
 
-        <FlatList
-          data={playlists}
-          keyExtractor={(p) => p.id}
-          ListHeaderComponent={
-            showCreateInput ? (
-              <View style={styles.newPlaylistRow}>
-                <TextInput
-                  style={styles.newPlaylistInput}
-                  value={newPlaylistName}
-                  onChangeText={setNewPlaylistName}
-                  placeholder="New playlist name…"
-                  placeholderTextColor="#666"
-                  returnKeyType="done"
-                  autoFocus
-                  onSubmitEditing={handleCreateAndAdd}
-                />
+          <FlatList
+            data={playlists}
+            keyExtractor={(p) => p.id}
+            ListHeaderComponent={
+              showCreateInput ? (
+                <HStack gap="sm" padY="sm">
+                  <View style={{ flex: 1 }}>
+                    <Input
+                      value={newPlaylistName}
+                      onChangeText={setNewPlaylistName}
+                      placeholder="New playlist name..."
+                      returnKeyType="done"
+                      autoFocus
+                      onSubmitEditing={handleCreateAndAdd}
+                    />
+                  </View>
+                  <Button
+                    label={creatingPlaylist ? "Creating" : "Create"}
+                    onPress={handleCreateAndAdd}
+                    disabled={!newPlaylistName.trim() || creatingPlaylist}
+                    leading={
+                      creatingPlaylist ? (
+                        <ActivityIndicator color={palette.inkInverse} size="small" />
+                      ) : null
+                    }
+                  />
+                </HStack>
+              ) : (
                 <Pressable
-                  style={[
-                    styles.newPlaylistButton,
-                    (!newPlaylistName.trim() || creatingPlaylist) &&
-                      styles.newPlaylistButtonDisabled,
-                  ]}
-                  onPress={handleCreateAndAdd}
-                  disabled={!newPlaylistName.trim() || creatingPlaylist}
+                  flat
+                  onPress={() => setShowCreateInput(true)}
+                  android_ripple={{ color: palette.paperSunken }}
                 >
-                  {creatingPlaylist ? (
-                    <ActivityIndicator color="#000" size="small" />
-                  ) : (
-                    <Text style={styles.newPlaylistButtonText}>Create</Text>
-                  )}
+                  <HStack gap="md" padY="md">
+                    <Ionicons name="add" size={22} color={palette.ink} />
+                    <Text variant="bodyStrong">Create new playlist</Text>
+                  </HStack>
                 </Pressable>
-              </View>
-            ) : (
+              )
+            }
+            ListEmptyComponent={
+              showCreateInput ? null : (
+                <VStack padY="xl" align="center">
+                  <Text variant="caption" tone="muted" align="center">
+                    No playlists yet — tap Create new playlist above.
+                  </Text>
+                </VStack>
+              )
+            }
+            renderItem={({ item: pl }) => (
               <Pressable
-                style={styles.createNewRow}
-                onPress={() => setShowCreateInput(true)}
-                android_ripple={{ color: "rgba(255,255,255,0.06)" }}
+                flat
+                onPress={() => handlePickPlaylist(pl.id, pl.name)}
+                android_ripple={{ color: palette.paperSunken }}
               >
-                <Ionicons name="add" size={22} color="#fff" />
-                <Text style={styles.createNewText}>Create new playlist</Text>
+                <HStack justify="between" padY="md">
+                  <Text variant="bodyStrong">{pl.name}</Text>
+                  <Text variant="caption" tone="muted">
+                    {pl.trackCount} {pl.trackCount === 1 ? "track" : "tracks"}
+                  </Text>
+                </HStack>
               </Pressable>
-            )
-          }
-          ListEmptyComponent={
-            showCreateInput ? null : (
-              <Text style={styles.emptyText}>
-                No playlists yet — tap "Create new playlist" above.
-              </Text>
-            )
-          }
-          renderItem={({ item: pl }) => (
-            <Pressable
-              style={styles.row}
-              onPress={() => handlePickPlaylist(pl.id, pl.name)}
-              android_ripple={{ color: "rgba(255,255,255,0.06)" }}
-            >
-              <Text style={styles.rowText}>{pl.name}</Text>
-              <Text style={styles.rowCount}>
-                {pl.trackCount} {pl.trackCount === 1 ? "track" : "tracks"}
-              </Text>
-            </Pressable>
-          )}
-        />
-      </View>
+            )}
+            ItemSeparatorComponent={() => <Divider inset="none" />}
+            contentContainerStyle={{ paddingBottom: space.lg }}
+            showsVerticalScrollIndicator={false}
+          />
+        </VStack>
+      </Surface>
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  sheet: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#0a0a0a",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 8,
-    paddingHorizontal: 12,
-    paddingBottom: 16,
-    maxHeight: "70%",
-    minHeight: "30%",
-  },
-  handle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#333",
-    marginBottom: 8,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 4,
-    paddingTop: 4,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  newPlaylistRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#222",
-    marginBottom: 4,
-  },
-  newPlaylistInput: {
-    flex: 1,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: "#fff",
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  newPlaylistButton: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  newPlaylistButtonDisabled: {
-    opacity: 0.3,
-  },
-  newPlaylistButtonText: {
-    color: "#000",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  createNewRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 16,
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#222",
-    marginBottom: 4,
-  },
-  createNewText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#1a1a1a",
-  },
-  rowText: {
-    color: "#fff",
-    fontSize: 16,
-  },
-  rowCount: {
-    color: "#666",
-    fontSize: 13,
-  },
-  emptyText: {
-    color: "#666",
-    textAlign: "center",
-    paddingVertical: 32,
-    fontSize: 14,
-  },
-});

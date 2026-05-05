@@ -1,16 +1,16 @@
 import type { Track } from "@aani/types";
 import { useEffect, useState } from "react";
+import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform } from "react-native";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  StyleSheet,
+  AppBar,
+  Button,
+  Field,
+  Input,
+  Screen,
   Text,
-  TextInput,
-  View,
-} from "react-native";
+  VStack,
+  palette,
+} from "./ui";
 
 interface EditTrackModalProps {
   track: Track | null;
@@ -80,105 +80,63 @@ export default function EditTrackModal({
       presentationStyle="formSheet"
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <View style={styles.header}>
-          <Pressable onPress={onClose}>
-            <Text style={styles.cancel}>Cancel</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>Edit Track</Text>
-          <Pressable onPress={handleSave} disabled={saving}>
-            {saving ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.save}>Save</Text>
-            )}
-          </Pressable>
-        </View>
+      <Screen>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+        >
+          <VStack gap="lg">
+            <AppBar
+              title="Edit Track"
+              onBack={onClose}
+              trailing={
+                saving ? (
+                  <ActivityIndicator color={palette.ink} size="small" />
+                ) : undefined
+              }
+            />
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? (
+              <Text variant="caption" tone="critical">
+                {error}
+              </Text>
+            ) : null}
 
-        <Text style={styles.label}>Title</Text>
-        <TextInput
-          style={styles.input}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Track title"
-          placeholderTextColor="#666"
-        />
+            <Field label="Title">
+              <Input
+                value={title}
+                onChangeText={setTitle}
+                placeholder="Track title"
+              />
+            </Field>
 
-        <Text style={styles.label}>Artist</Text>
-        <TextInput
-          style={styles.input}
-          value={artist}
-          onChangeText={setArtist}
-          placeholder="Artist name"
-          placeholderTextColor="#666"
-        />
+            <Field label="Artist">
+              <Input
+                value={artist}
+                onChangeText={setArtist}
+                placeholder="Artist name"
+              />
+            </Field>
 
-        <Text style={styles.label}>BPM</Text>
-        <TextInput
-          style={styles.input}
-          value={bpm}
-          onChangeText={setBpm}
-          placeholder="e.g. 128"
-          placeholderTextColor="#666"
-          keyboardType="decimal-pad"
-        />
-      </KeyboardAvoidingView>
+            <Field label="BPM">
+              <Input
+                value={bpm}
+                onChangeText={setBpm}
+                placeholder="e.g. 128"
+                keyboardType="decimal-pad"
+              />
+            </Field>
+
+            <Button
+              label={saving ? "Saving" : "Save"}
+              onPress={handleSave}
+              disabled={saving}
+              block
+              leading={saving ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
+            />
+          </VStack>
+        </KeyboardAvoidingView>
+      </Screen>
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-    paddingHorizontal: 16,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#333",
-    marginBottom: 24,
-  },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "600",
-  },
-  cancel: {
-    color: "#888",
-    fontSize: 16,
-  },
-  save: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  error: {
-    color: "#ef4444",
-    fontSize: 14,
-    marginBottom: 12,
-  },
-  label: {
-    color: "#888",
-    fontSize: 13,
-    marginBottom: 6,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
-    color: "#fff",
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-});

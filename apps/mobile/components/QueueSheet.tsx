@@ -1,17 +1,10 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import {
-  Alert,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Alert, Modal, View } from "react-native";
 import DraggableFlatList, {
-  type RenderItemParams,
   ScaleDecorator,
+  type RenderItemParams,
 } from "react-native-draggable-flatlist";
 import {
   GestureHandlerRootView,
@@ -20,6 +13,17 @@ import {
 } from "react-native-gesture-handler";
 import { type QueueItem, usePlayerStore } from "../store/player";
 import PlaylistPickerSheet from "./PlaylistPickerSheet";
+import {
+  HStack,
+  IconButton,
+  Pressable,
+  Surface,
+  Text,
+  VStack,
+  palette,
+  radius,
+  space,
+} from "./ui";
 
 interface QueueRowProps {
   item: QueueItem;
@@ -44,8 +48,6 @@ const QueueRow = memo(function QueueRow({
   onSwipeRemove,
   onTogglePlayPause,
 }: QueueRowProps) {
-  // Per-row store subscriptions so currentIndex/playing changes only re-render
-  // the two rows that actually flip state (was-current, now-current).
   const isCurrent = usePlayerStore((s) => s.currentIndex === idx);
   const isPast = usePlayerStore((s) => idx < s.currentIndex);
   const playing = usePlayerStore((s) => (s.currentIndex === idx ? s.playing : false));
@@ -53,64 +55,86 @@ const QueueRow = memo(function QueueRow({
 
   const rowContent = (
     <View
-      style={[
-        styles.row,
-        isCurrent && styles.rowCurrent,
-        isActive && styles.rowActive,
-        isPast && styles.rowPast,
-      ]}
+      style={{
+        borderRadius: radius.md,
+        backgroundColor: isActive
+          ? palette.paperSunken
+          : isCurrent
+            ? palette.paperRaised
+            : palette.transparent,
+        opacity: isPast ? 0.55 : 1,
+      }}
     >
-      <View style={styles.iconSlot}>
-        {isCurrent ? (
-          <Pressable
-            onPress={onTogglePlayPause}
-            disabled={isActive}
-            style={styles.iconHit}
-            hitSlop={6}
-          >
-            <Ionicons name={playing ? "pause" : "play"} size={22} color="#fff" />
-          </Pressable>
-        ) : (
-          <TouchableOpacity
-            onLongPress={drag}
-            delayLongPress={150}
-            disabled={isActive}
-            style={styles.iconHit}
-            activeOpacity={0.5}
-          >
-            <Ionicons name="reorder-three" size={22} color={isPast ? "#444" : "#888"} />
-          </TouchableOpacity>
-        )}
-      </View>
+      <HStack gap="sm" padX="sm" padY="sm">
+        <View style={{ width: 36, alignItems: "center" }}>
+          {isCurrent ? (
+            <IconButton
+              icon={playing ? "pause" : "play"}
+              accessibilityLabel={playing ? "Pause" : "Play"}
+              onPress={onTogglePlayPause}
+              disabled={isActive}
+              size={22}
+            />
+          ) : (
+            <TouchableOpacity
+              onLongPress={drag}
+              delayLongPress={150}
+              disabled={isActive}
+              style={{
+                width: 36,
+                height: 36,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+              activeOpacity={0.5}
+            >
+              <Ionicons
+                name="reorder-three"
+                size={22}
+                color={isPast ? palette.inkFaint : palette.inkMuted}
+              />
+            </TouchableOpacity>
+          )}
+        </View>
 
-      <Pressable
-        style={styles.info}
-        onPress={() => {
-          if (isCurrent) return;
-          onPress(idx);
-        }}
-        disabled={isActive}
-      >
-        <Text style={[styles.title, isPast && styles.titlePast]} numberOfLines={1}>
-          {item.track.title}
-        </Text>
-        {item.track.artist ? (
-          <Text style={[styles.artist, isPast && styles.artistPast]} numberOfLines={1}>
-            {item.track.artist}
-          </Text>
-        ) : null}
-      </Pressable>
-
-      <View style={styles.iconSlot}>
         <Pressable
-          hitSlop={10}
+          flat
+          style={{ flex: 1 }}
+          onPress={() => {
+            if (isCurrent) return;
+            onPress(idx);
+          }}
+          disabled={isActive}
+        >
+          <VStack gap="xs">
+            <Text
+              variant="bodyStrong"
+              tone={isPast ? "muted" : "primary"}
+              numberOfLines={1}
+            >
+              {item.track.title}
+            </Text>
+            {item.track.artist ? (
+              <Text
+                variant="caption"
+                tone={isPast ? "faint" : "muted"}
+                numberOfLines={1}
+              >
+                {item.track.artist}
+              </Text>
+            ) : null}
+          </VStack>
+        </Pressable>
+
+        <IconButton
+          icon="ellipsis-vertical"
+          accessibilityLabel="Queue row options"
           onPress={() => onMenu(item.trackId, item.track.title, idx, isCurrent)}
           disabled={isActive}
-          style={styles.iconHit}
-        >
-          <Ionicons name="ellipsis-vertical" size={20} color="#888" />
-        </Pressable>
-      </View>
+          color={palette.inkMuted}
+          size={20}
+        />
+      </HStack>
     </View>
   );
 
@@ -156,12 +180,12 @@ export default function QueueSheet() {
     const idx = usePlayerStore.getState().currentIndex;
     if (idx < 0) return;
     const t = setTimeout(() => {
-      const ROW_HEIGHT_ESTIMATE = 62;
-      const offset = Math.max(0, idx * ROW_HEIGHT_ESTIMATE - ROW_HEIGHT_ESTIMATE * 2);
+      const rowHeightEstimate = 62;
+      const offset = Math.max(0, idx * rowHeightEstimate - rowHeightEstimate * 2);
       try {
         listRef.current?.scrollToOffset?.({ offset, animated: false });
       } catch {
-        // ignore
+        // Ignore scroll failures while the list is mounting.
       }
     }, 50);
     return () => clearTimeout(t);
@@ -171,28 +195,40 @@ export default function QueueSheet() {
 
   const showRowMenu = useCallback(
     (trackId: string, title: string, idx: number, isCurrent: boolean) => {
-      const buttons = [
+      Alert.alert(title, undefined, [
         {
           text: "Add to playlist",
           onPress: () => setPickerTrack({ id: trackId, title }),
         },
         {
           text: isCurrent ? "Remove (skips to next)" : "Remove from queue",
-          style: "destructive" as const,
+          style: "destructive",
           onPress: () => userId && removeAt(idx, userId),
         },
-        { text: "Cancel", style: "cancel" as const },
-      ];
-      Alert.alert(title, undefined, buttons);
+        { text: "Cancel", style: "cancel" },
+      ]);
     },
     [userId, removeAt],
   );
 
   const renderRightActions = useCallback(
     () => (
-      <View style={styles.swipeRemove}>
-        <Ionicons name="trash" size={22} color="#fff" />
-        <Text style={styles.swipeRemoveText}>Remove</Text>
+      <View
+        style={{
+          backgroundColor: palette.critical,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          paddingHorizontal: space.lg,
+          gap: space.sm,
+          borderRadius: radius.md,
+          marginVertical: space.hair,
+        }}
+      >
+        <Ionicons name="trash" size={22} color={palette.inkInverse} />
+        <Text variant="bodyStrong" tone="inverse">
+          Remove
+        </Text>
       </View>
     ),
     [],
@@ -256,34 +292,68 @@ export default function QueueSheet() {
       onRequestClose={handleClose}
     >
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <Pressable style={styles.backdrop} onPress={handleClose} />
-        <View style={styles.sheet}>
-          <View style={styles.handle} />
-          <View style={styles.header}>
-            <View>
-              <Text style={styles.headerTitle}>Queue</Text>
-              <Text style={styles.headerSubtitle}>{summary}</Text>
-            </View>
-            <Pressable onPress={handleClose} hitSlop={10}>
-              <Ionicons name="close" size={24} color="#fff" />
-            </Pressable>
-          </View>
-
-          {queue.length > 0 ? (
-            <DraggableFlatList
-              ref={listRef}
-              data={queue}
-              keyExtractor={(item, i) => `${item.trackId}-${i}`}
-              renderItem={renderItem}
-              onDragEnd={handleDragEnd}
-              contentContainerStyle={{ paddingBottom: 40, paddingTop: 4 }}
-              activationDistance={8}
+        <Pressable
+          flat
+          style={{ flex: 1, backgroundColor: "rgba(22,19,14,0.45)" }}
+          onPress={handleClose}
+        />
+        <Surface
+          tone="raised"
+          lift="sheet"
+          rounded="xl"
+          pad="md"
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            maxHeight: "85%",
+            minHeight: "55%",
+          }}
+        >
+          <VStack gap="md" flex>
+            <View
+              style={{
+                alignSelf: "center",
+                width: 40,
+                height: 4,
+                borderRadius: radius.full,
+                backgroundColor: palette.paperEdge,
+              }}
             />
-          ) : (
-            <Text style={styles.emptyText}>Tracks you play will appear here</Text>
-          )}
-        </View>
+            <HStack justify="between">
+              <VStack gap="xs">
+                <Text variant="title">Queue</Text>
+                <Text variant="caption" tone="muted">
+                  {summary}
+                </Text>
+              </VStack>
+              <IconButton
+                icon="close"
+                accessibilityLabel="Close queue"
+                onPress={handleClose}
+              />
+            </HStack>
 
+            {queue.length > 0 ? (
+              <DraggableFlatList
+                ref={listRef}
+                data={queue}
+                keyExtractor={(item, i) => `${item.trackId}-${i}`}
+                renderItem={renderItem}
+                onDragEnd={handleDragEnd}
+                contentContainerStyle={{ paddingBottom: space.xl, paddingTop: space.xs }}
+                activationDistance={8}
+              />
+            ) : (
+              <VStack padY="xl" align="center">
+                <Text variant="caption" tone="muted">
+                  Tracks you play will appear here
+                </Text>
+              </VStack>
+            )}
+          </VStack>
+        </Surface>
       </GestureHandlerRootView>
       <PlaylistPickerSheet
         visible={pickerTrack != null}
@@ -293,202 +363,3 @@ export default function QueueSheet() {
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-  },
-  sheet: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#0a0a0a",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 8,
-    paddingHorizontal: 12,
-    paddingBottom: 16,
-    maxHeight: "85%",
-    minHeight: "55%",
-  },
-  pickerSheet: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "#0a0a0a",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingTop: 8,
-    paddingHorizontal: 12,
-    paddingBottom: 16,
-    maxHeight: "70%",
-    minHeight: "30%",
-  },
-  handle: {
-    alignSelf: "center",
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: "#333",
-    marginBottom: 8,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 4,
-    paddingTop: 4,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  headerSubtitle: {
-    color: "#666",
-    fontSize: 12,
-    marginTop: 2,
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    borderRadius: 8,
-    gap: 8,
-    backgroundColor: "#0a0a0a",
-  },
-  rowActive: {
-    backgroundColor: "#222",
-  },
-  rowCurrent: {
-    backgroundColor: "#181818",
-  },
-  rowPast: {
-    opacity: 0.55,
-  },
-  iconSlot: {
-    width: 36,
-    height: 36,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  iconHit: {
-    width: 36,
-    height: 36,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  info: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  title: {
-    color: "#fff",
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  titlePast: {
-    color: "#999",
-  },
-  artist: {
-    color: "#888",
-    fontSize: 12,
-  },
-  artistPast: {
-    color: "#666",
-  },
-  swipeRemove: {
-    backgroundColor: "#b3261e",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-    gap: 6,
-    borderRadius: 8,
-    marginVertical: 1,
-  },
-  swipeRemoveText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  pickerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#1a1a1a",
-  },
-  newPlaylistRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#222",
-    marginBottom: 4,
-  },
-  newPlaylistInput: {
-    flex: 1,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: "#fff",
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  newPlaylistButton: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  newPlaylistButtonDisabled: {
-    opacity: 0.3,
-  },
-  newPlaylistButtonText: {
-    color: "#000",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  createNewRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 16,
-    gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#222",
-    marginBottom: 4,
-  },
-  createNewText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  pickerRowText: {
-    color: "#fff",
-    fontSize: 16,
-  },
-  pickerRowCount: {
-    color: "#666",
-    fontSize: 13,
-  },
-  emptyText: {
-    color: "#666",
-    textAlign: "center",
-    paddingVertical: 32,
-    fontSize: 14,
-  },
-});
