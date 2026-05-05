@@ -64,7 +64,6 @@ export const discogsUserItems = pgTable(
     userId: text("user_id").notNull(),
     releaseId: text("release_id").notNull(),
     type: text("type").notNull(),
-    note: text("note"),
     syncedAt: timestamp("synced_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

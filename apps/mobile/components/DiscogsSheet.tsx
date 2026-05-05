@@ -39,7 +39,6 @@ type TrackEnrichment = {
   metadata: DiscogsMetadata | null;
   inCollection: boolean;
   inWantlist: boolean;
-  collectionNote?: string | null;
   wantlistNote?: string | null;
 };
 
@@ -72,11 +71,8 @@ export default function DiscogsSheet({
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [pendingReleaseId, setPendingReleaseId] = useState<string | null>(null);
-  const [collectionNote, setCollectionNote] = useState("");
   const [wantlistNote, setWantlistNote] = useState("");
-  const [savingNote, setSavingNote] = useState<"collection" | "wantlist" | null>(
-    null,
-  );
+  const [savingWantlistNote, setSavingWantlistNote] = useState(false);
   const [togglingCollection, setTogglingCollection] = useState(false);
   const [togglingWantlist, setTogglingWantlist] = useState(false);
   const [kbHeight, setKbHeight] = useState(0);
@@ -104,7 +100,6 @@ export default function DiscogsSheet({
   const propagate = useCallback(
     (next: TrackEnrichment) => {
       setEnrichment(next);
-      setCollectionNote(next.collectionNote ?? "");
       setWantlistNote(next.wantlistNote ?? "");
       onEnrichmentChange?.(next);
     },
@@ -204,10 +199,7 @@ export default function DiscogsSheet({
       } else {
         const { error } = await apiFetch(`/discogs/collection`, token, {
           method: "POST",
-          body: JSON.stringify({
-            releaseId,
-            note: collectionNote.trim() || undefined,
-          }),
+          body: JSON.stringify({ releaseId }),
         });
         if (error) Alert.alert("Couldn't add to collection", error);
         else flash("Added to collection");
@@ -250,20 +242,18 @@ export default function DiscogsSheet({
     }
   }
 
-  async function saveNote(type: "collection" | "wantlist") {
+  async function saveWantlistNote() {
     if (!enrichment?.metadata) return;
     const token = await getToken();
     if (!token) return;
     const releaseId = enrichment.metadata.releaseId;
-    const note = type === "collection" ? collectionNote : wantlistNote;
-    setSavingNote(type);
+    setSavingWantlistNote(true);
     try {
-      const { error } = await apiFetch(`/discogs/note`, token, {
-        method: "PATCH",
+      const { error } = await apiFetch(`/discogs/wantlist`, token, {
+        method: "POST",
         body: JSON.stringify({
           releaseId,
-          type,
-          note: note.trim() || null,
+          note: wantlistNote.trim() || null,
         }),
       });
       if (error) {
@@ -273,7 +263,7 @@ export default function DiscogsSheet({
         await refresh();
       }
     } finally {
-      setSavingNote(null);
+      setSavingWantlistNote(false);
     }
   }
 
@@ -405,15 +395,6 @@ export default function DiscogsSheet({
                   )}
                 </Pressable>
               </View>
-              {enrichment?.inCollection ? (
-                <NoteRow
-                  value={collectionNote}
-                  onChangeText={setCollectionNote}
-                  placeholder="Note (e.g. ostettu Helsingistä)"
-                  saving={savingNote === "collection"}
-                  onSave={() => saveNote("collection")}
-                />
-              ) : null}
             </View>
 
             <View style={styles.section}>
@@ -453,9 +434,9 @@ export default function DiscogsSheet({
                 <NoteRow
                   value={wantlistNote}
                   onChangeText={setWantlistNote}
-                  placeholder={'Note (e.g. haluan 12" version)'}
-                  saving={savingNote === "wantlist"}
-                  onSave={() => saveNote("wantlist")}
+                  placeholder={'Discogs note (e.g. haluan 12" version)'}
+                  saving={savingWantlistNote}
+                  onSave={saveWantlistNote}
                 />
               ) : null}
             </View>

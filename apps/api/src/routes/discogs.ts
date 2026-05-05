@@ -12,10 +12,10 @@ import { env } from "../lib/env";
 import {
   DiscogsError,
   addToCollection,
-  addToWantlist,
   getRelease,
+  getWantEntry,
   isInCollection,
-  isInWantlist,
+  putWant,
   releaseToMetadata,
   removeFromCollection,
   removeFromWantlist,
@@ -45,57 +45,35 @@ async function userOwnsTrack(userId: string, trackId: string) {
   return !!row;
 }
 
-async function upsertUserItem(
+async function syncMembership(
   userId: string,
   releaseId: string,
   type: "collection" | "wantlist",
-  note: string | null,
+  isMember: boolean,
 ) {
-  await db
-    .insert(discogsUserItems)
-    .values({ userId, releaseId, type, note })
-    .onConflictDoUpdate({
-      target: [
-        discogsUserItems.userId,
-        discogsUserItems.releaseId,
-        discogsUserItems.type,
-      ],
-      set: { note, syncedAt: new Date() },
-    });
-}
-
-async function deleteUserItem(
-  userId: string,
-  releaseId: string,
-  type: "collection" | "wantlist",
-) {
-  await db
-    .delete(discogsUserItems)
-    .where(
-      and(
-        eq(discogsUserItems.userId, userId),
-        eq(discogsUserItems.releaseId, releaseId),
-        eq(discogsUserItems.type, type),
-      ),
-    );
-}
-
-async function getUserItem(
-  userId: string,
-  releaseId: string,
-  type: "collection" | "wantlist",
-) {
-  const [row] = await db
-    .select()
-    .from(discogsUserItems)
-    .where(
-      and(
-        eq(discogsUserItems.userId, userId),
-        eq(discogsUserItems.releaseId, releaseId),
-        eq(discogsUserItems.type, type),
-      ),
-    );
-  return row ?? null;
+  if (isMember) {
+    await db
+      .insert(discogsUserItems)
+      .values({ userId, releaseId, type })
+      .onConflictDoUpdate({
+        target: [
+          discogsUserItems.userId,
+          discogsUserItems.releaseId,
+          discogsUserItems.type,
+        ],
+        set: { syncedAt: new Date() },
+      });
+  } else {
+    await db
+      .delete(discogsUserItems)
+      .where(
+        and(
+          eq(discogsUserItems.userId, userId),
+          eq(discogsUserItems.releaseId, releaseId),
+          eq(discogsUserItems.type, type),
+        ),
+      );
+  }
 }
 
 discogsRoute.get("/discogs/search", async (c) => {
@@ -136,33 +114,19 @@ discogsRoute.post("/discogs/enrich", async (c) => {
       })
       .where(eq(tracks.id, trackId));
 
-    const [inCollection, inWantlist] = await Promise.all([
+    const [inCollection, wantEntry] = await Promise.all([
       isInCollection(releaseId),
-      isInWantlist(releaseId),
+      getWantEntry(releaseId),
     ]);
 
-    if (inCollection) {
-      const existing = await getUserItem(userId, releaseId, "collection");
-      await upsertUserItem(userId, releaseId, "collection", existing?.note ?? null);
-    } else {
-      await deleteUserItem(userId, releaseId, "collection");
-    }
-    if (inWantlist) {
-      const existing = await getUserItem(userId, releaseId, "wantlist");
-      await upsertUserItem(userId, releaseId, "wantlist", existing?.note ?? null);
-    } else {
-      await deleteUserItem(userId, releaseId, "wantlist");
-    }
-
-    const localCollection = await getUserItem(userId, releaseId, "collection");
-    const localWantlist = await getUserItem(userId, releaseId, "wantlist");
+    await syncMembership(userId, releaseId, "collection", inCollection);
+    await syncMembership(userId, releaseId, "wantlist", wantEntry.inList);
 
     return c.json({
       metadata,
       inCollection,
-      inWantlist,
-      collectionNote: localCollection?.note ?? null,
-      wantlistNote: localWantlist?.note ?? null,
+      inWantlist: wantEntry.inList,
+      wantlistNote: wantEntry.note,
     });
   } catch (err) {
     const { status, body } = handleError(err);
@@ -198,33 +162,41 @@ discogsRoute.get("/discogs/track/:trackId", async (c) => {
     .where(eq(tracks.id, trackId));
   if (!row) return c.json({ error: "Track not found" }, 404);
   if (!row.discogsReleaseId) {
-    return c.json({ metadata: null, inCollection: false, inWantlist: false });
+    return c.json({
+      metadata: null,
+      inCollection: false,
+      inWantlist: false,
+      wantlistNote: null,
+    });
   }
   const releaseId = row.discogsReleaseId;
-  const [collection, wantlist] = await Promise.all([
-    getUserItem(userId, releaseId, "collection"),
-    getUserItem(userId, releaseId, "wantlist"),
-  ]);
-  return c.json({
-    metadata: row.discogsMetadata,
-    inCollection: !!collection,
-    inWantlist: !!wantlist,
-    collectionNote: collection?.note ?? null,
-    wantlistNote: wantlist?.note ?? null,
-  });
+  try {
+    const [inCollection, wantEntry] = await Promise.all([
+      isInCollection(releaseId),
+      getWantEntry(releaseId),
+    ]);
+    await syncMembership(userId, releaseId, "collection", inCollection);
+    await syncMembership(userId, releaseId, "wantlist", wantEntry.inList);
+    return c.json({
+      metadata: row.discogsMetadata,
+      inCollection,
+      inWantlist: wantEntry.inList,
+      wantlistNote: wantEntry.note,
+    });
+  } catch (err) {
+    const { status, body } = handleError(err);
+    return c.json(body, status as 400 | 401 | 404 | 500 | 503);
+  }
 });
 
 discogsRoute.post("/discogs/collection", async (c) => {
   const userId = c.get("userId");
-  const { releaseId, note } = await c.req.json<{
-    releaseId: string;
-    note?: string;
-  }>();
+  const { releaseId } = await c.req.json<{ releaseId: string }>();
   if (!releaseId) return c.json({ error: "releaseId is required" }, 400);
   try {
     const already = await isInCollection(releaseId);
     if (!already) await addToCollection(releaseId);
-    await upsertUserItem(userId, releaseId, "collection", note ?? null);
+    await syncMembership(userId, releaseId, "collection", true);
     return c.json({ ok: true, alreadyExists: already });
   } catch (err) {
     const { status, body } = handleError(err);
@@ -237,7 +209,7 @@ discogsRoute.delete("/discogs/collection/:releaseId", async (c) => {
   const releaseId = c.req.param("releaseId");
   try {
     const removed = await removeFromCollection(releaseId);
-    await deleteUserItem(userId, releaseId, "collection");
+    await syncMembership(userId, releaseId, "collection", false);
     return c.json({ ok: true, removedInstances: removed });
   } catch (err) {
     const { status, body } = handleError(err);
@@ -249,13 +221,14 @@ discogsRoute.post("/discogs/wantlist", async (c) => {
   const userId = c.get("userId");
   const { releaseId, note } = await c.req.json<{
     releaseId: string;
-    note?: string;
+    note?: string | null;
   }>();
   if (!releaseId) return c.json({ error: "releaseId is required" }, 400);
   try {
-    await addToWantlist(releaseId, note);
-    await upsertUserItem(userId, releaseId, "wantlist", note ?? null);
-    return c.json({ ok: true });
+    await putWant(releaseId, note);
+    await syncMembership(userId, releaseId, "wantlist", true);
+    const wantEntry = await getWantEntry(releaseId);
+    return c.json({ ok: true, wantlistNote: wantEntry.note });
   } catch (err) {
     const { status, body } = handleError(err);
     return c.json(body, status as 400 | 401 | 404 | 500 | 503);
@@ -267,31 +240,10 @@ discogsRoute.delete("/discogs/wantlist/:releaseId", async (c) => {
   const releaseId = c.req.param("releaseId");
   try {
     await removeFromWantlist(releaseId);
-    await deleteUserItem(userId, releaseId, "wantlist");
+    await syncMembership(userId, releaseId, "wantlist", false);
     return c.json({ ok: true });
   } catch (err) {
     const { status, body } = handleError(err);
     return c.json(body, status as 400 | 401 | 404 | 500 | 503);
   }
-});
-
-discogsRoute.patch("/discogs/note", async (c) => {
-  const userId = c.get("userId");
-  const { releaseId, type, note } = await c.req.json<{
-    releaseId: string;
-    type: "collection" | "wantlist";
-    note: string | null;
-  }>();
-  if (!releaseId || !type) {
-    return c.json({ error: "releaseId and type are required" }, 400);
-  }
-  if (type !== "collection" && type !== "wantlist") {
-    return c.json({ error: "type must be collection or wantlist" }, 400);
-  }
-  const existing = await getUserItem(userId, releaseId, type);
-  if (!existing) {
-    return c.json({ error: "Not in your local cache; add it first" }, 404);
-  }
-  await upsertUserItem(userId, releaseId, type, note?.trim() || null);
-  return c.json({ ok: true });
 });

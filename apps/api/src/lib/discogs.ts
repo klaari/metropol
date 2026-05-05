@@ -184,22 +184,27 @@ export async function removeFromCollection(releaseId: string) {
   return instances.length;
 }
 
-export async function isInWantlist(releaseId: string): Promise<boolean> {
+export async function getWantEntry(
+  releaseId: string,
+): Promise<{ inList: boolean; note: string | null }> {
   const { username } = ensureCredentials();
-  const data = await discogsFetch<{ id: number }>(
+  const data = await discogsFetch<{ id: number; notes?: string | null }>(
     `/users/${encodeURIComponent(username)}/wants/${encodeURIComponent(releaseId)}`,
     { allow404: true },
   );
-  return !!data;
+  if (!data) return { inList: false, note: null };
+  return { inList: true, note: data.notes ?? null };
 }
 
-export async function addToWantlist(releaseId: string, notes?: string) {
+export async function putWant(releaseId: string, notes?: string | null) {
   const { username } = ensureCredentials();
+  const body: Record<string, unknown> = {};
+  if (notes !== undefined) body.notes = notes ?? "";
   return discogsFetch(
     `/users/${encodeURIComponent(username)}/wants/${encodeURIComponent(releaseId)}`,
     {
       method: "PUT",
-      body: notes ? JSON.stringify({ notes }) : undefined,
+      body: Object.keys(body).length ? JSON.stringify(body) : undefined,
     },
   );
 }
