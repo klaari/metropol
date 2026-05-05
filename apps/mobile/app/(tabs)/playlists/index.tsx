@@ -1,4 +1,5 @@
 import { useAuth } from "@clerk/clerk-expo";
+import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -7,19 +8,33 @@ import {
   Alert,
   FlatList,
   Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
+import {
+  Button,
+  Divider,
+  HStack,
+  IconButton,
+  Input,
+  ListRow,
+  Screen,
+  Text,
+  VStack,
+  palette,
+} from "../../../components/ui";
 import { usePlaylistsStore } from "../../../store/playlists";
 
 export default function PlaylistsScreen() {
   const { userId } = useAuth();
   const router = useRouter();
-  const { playlists, isLoading, fetchPlaylists, createPlaylist, renamePlaylist, deletePlaylist } =
-    usePlaylistsStore();
+  const {
+    playlists,
+    isLoading,
+    fetchPlaylists,
+    createPlaylist,
+    renamePlaylist,
+    deletePlaylist,
+  } = usePlaylistsStore();
 
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
@@ -50,15 +65,9 @@ export default function PlaylistsScreen() {
           "plain-text",
           currentName,
         ) ??
-          // Android fallback
           Alert.alert("Rename", "Enter new name", [
             { text: "Cancel", style: "cancel" },
-            {
-              text: "OK",
-              onPress: () => {
-                // On Android, Alert.prompt doesn't exist — handled inline
-              },
-            },
+            { text: "OK" },
           ]);
       } else if (index === 1) {
         Alert.alert("Delete Playlist", `Delete "${currentName}"?`, [
@@ -87,172 +96,75 @@ export default function PlaylistsScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Playlists</Text>
-      </View>
-
-      {showCreate ? (
-        <View style={styles.createRow}>
-          <TextInput
-            style={styles.createInput}
-            placeholder="Playlist name"
-            placeholderTextColor="#666"
-            value={newName}
-            onChangeText={setNewName}
-            autoFocus
-            onSubmitEditing={handleCreate}
+    <Screen scroll={false}>
+      <VStack flex gap="lg">
+        <HStack justify="between">
+          <Text variant="titleLg">Playlists</Text>
+          <IconButton
+            icon={showCreate ? "close" : "add"}
+            accessibilityLabel={showCreate ? "Cancel playlist creation" : "Create playlist"}
+            onPress={() => {
+              setShowCreate((current) => !current);
+              setNewName("");
+            }}
           />
-          <Pressable style={styles.createBtn} onPress={handleCreate}>
-            <Text style={styles.createBtnText}>Create</Text>
-          </Pressable>
-          <Pressable onPress={() => { setShowCreate(false); setNewName(""); }}>
-            <Text style={styles.cancelText}>Cancel</Text>
-          </Pressable>
-        </View>
-      ) : null}
+        </HStack>
 
-      {isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color="#fff" size="large" />
-        </View>
-      ) : playlists.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyText}>No playlists yet</Text>
-          <Text style={styles.emptySubtext}>Tap + to create one</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={playlists}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <Pressable
-              style={({ pressed }) => [styles.item, pressed && styles.itemPressed]}
-              onPress={() => router.push(`/(tabs)/playlists/${item.id}`)}
-              onLongPress={() => showActions(item.id, item.name)}
-            >
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemCount}>
-                {item.trackCount} {item.trackCount === 1 ? "track" : "tracks"}
-              </Text>
-            </Pressable>
-          )}
-        />
-      )}
+        {showCreate ? (
+          <HStack gap="sm">
+            <View style={{ flex: 1 }}>
+              <Input
+                placeholder="Playlist name"
+                value={newName}
+                onChangeText={setNewName}
+                autoFocus
+                onSubmitEditing={handleCreate}
+              />
+            </View>
+            <Button label="Create" onPress={handleCreate} disabled={!newName.trim()} />
+          </HStack>
+        ) : null}
 
-      <Pressable style={styles.fab} onPress={() => setShowCreate(true)}>
-        <Text style={styles.fabText}>+</Text>
-      </Pressable>
-    </View>
+        {isLoading ? (
+          <VStack flex justify="center" align="center">
+            <ActivityIndicator color={palette.ink} size="large" />
+          </VStack>
+        ) : playlists.length === 0 ? (
+          <VStack flex justify="center" align="center" gap="xs">
+            <Ionicons name="list-outline" size={40} color={palette.inkFaint} />
+            <Text variant="title" align="center">
+              No playlists yet
+            </Text>
+            <Text variant="body" tone="muted" align="center">
+              Tap add to create one
+            </Text>
+          </VStack>
+        ) : (
+          <FlatList
+            data={playlists}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <ListRow
+                title={item.name}
+                subtitle={`${item.trackCount} ${
+                  item.trackCount === 1 ? "track" : "tracks"
+                }`}
+                trailing={
+                  <Ionicons
+                    name="chevron-forward"
+                    size={20}
+                    color={palette.inkMuted}
+                  />
+                }
+                onPress={() => router.push(`/(tabs)/playlists/${item.id}`)}
+                onLongPress={() => showActions(item.id, item.name)}
+              />
+            )}
+            ItemSeparatorComponent={() => <Divider indent={64} inset="none" />}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
+      </VStack>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "700",
-  },
-  fab: {
-    position: "absolute",
-    bottom: 32,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-  },
-  fabText: {
-    fontSize: 28,
-    fontWeight: "400",
-    color: "#000",
-    marginTop: -2,
-  },
-  createRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    gap: 8,
-  },
-  createInput: {
-    flex: 1,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    color: "#fff",
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  createBtn: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  createBtnText: {
-    color: "#000",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  cancelText: {
-    color: "#888",
-    fontSize: 14,
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "500",
-    marginBottom: 6,
-  },
-  emptySubtext: {
-    color: "#666",
-    fontSize: 14,
-  },
-  item: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#222",
-  },
-  itemPressed: {
-    backgroundColor: "#111",
-  },
-  itemName: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  itemCount: {
-    color: "#888",
-    fontSize: 14,
-  },
-});

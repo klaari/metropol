@@ -1,21 +1,27 @@
 import type { Track } from "@aani/types";
 import { useAuth } from "@clerk/clerk-expo";
+import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Alert, FlatList, Modal, View } from "react-native";
 import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Modal,
+  AppBar,
+  Button,
+  Divider,
+  HStack,
+  IconButton,
+  Input,
+  ListRow,
   Pressable,
-  StyleSheet,
+  Screen,
   Text,
-  TextInput,
-  View,
-} from "react-native";
+  VStack,
+  palette,
+  space,
+} from "../../../components/ui";
 import { useLibraryStore } from "../../../store/library";
-import { usePlaylistsStore } from "../../../store/playlists";
 import { usePlayerStore } from "../../../store/player";
+import { usePlaylistsStore } from "../../../store/playlists";
 
 type PlaylistTrackItem = Track & { playlistTrackId: string; position: number };
 
@@ -24,8 +30,14 @@ export default function PlaylistDetailScreen() {
   const { userId } = useAuth();
   const router = useRouter();
 
-  const { playlists, getPlaylistTracks, addTracksToPlaylist, removeTrackFromPlaylist, reorderTrack, renamePlaylist } =
-    usePlaylistsStore();
+  const {
+    playlists,
+    getPlaylistTracks,
+    addTracksToPlaylist,
+    removeTrackFromPlaylist,
+    reorderTrack,
+    renamePlaylist,
+  } = usePlaylistsStore();
   const libraryTracks = useLibraryStore((s) => s.tracks);
   const fetchLibraryTracks = useLibraryStore((s) => s.fetchTracks);
   const setPlaylistContext = usePlayerStore((s) => s.setPlaylistContext);
@@ -98,74 +110,107 @@ export default function PlaylistDetailScreen() {
 
   if (!playlist) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.emptyText}>Playlist not found</Text>
-      </View>
+      <Screen scroll={false}>
+        <VStack flex justify="center" align="center">
+          <Text variant="title">Playlist not found</Text>
+        </VStack>
+      </Screen>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} hitSlop={12}>
-          <Text style={styles.backArrow}>‹</Text>
-        </Pressable>
+    <Screen scroll={false}>
+      <VStack flex gap="lg">
+        <AppBar
+          title={editingName ? undefined : playlist.name}
+          onBack={() => router.back()}
+          trailing={
+            <IconButton
+              icon="add"
+              accessibilityLabel="Add tracks"
+              onPress={() => {
+                if (userId) fetchLibraryTracks(userId);
+                setShowPicker(true);
+              }}
+            />
+          }
+        />
+
         {editingName ? (
-          <TextInput
-            style={styles.nameInput}
-            value={nameInput}
-            onChangeText={setNameInput}
-            autoFocus
-            onSubmitEditing={saveRename}
-            onBlur={saveRename}
-          />
+          <HStack gap="sm">
+            <View style={{ flex: 1 }}>
+              <Input
+                value={nameInput}
+                onChangeText={setNameInput}
+                autoFocus
+                onSubmitEditing={saveRename}
+                onBlur={saveRename}
+              />
+            </View>
+            <Button label="Save" onPress={saveRename} />
+          </HStack>
         ) : (
-          <Pressable onPress={startRename}>
-            <Text style={styles.headerTitle}>{playlist.name}</Text>
+          <Pressable flat onPress={startRename}>
+            <Text variant="display">{playlist.name}</Text>
           </Pressable>
         )}
-        <Pressable onPress={() => {
-          if (userId) fetchLibraryTracks(userId);
-          setShowPicker(true);
-        }}>
-          <Text style={styles.addButton}>+ Add</Text>
-        </Pressable>
-      </View>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color="#fff" size="large" />
-        </View>
-      ) : tracks.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyText}>No tracks in this playlist</Text>
-          <Text style={styles.emptySubtext}>Tap + Add to add tracks</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={tracks}
-          keyExtractor={(item) => item.playlistTrackId}
-          renderItem={({ item, index }) => (
-            <View style={styles.trackRow}>
-              <View style={styles.reorderBtns}>
-                <Pressable
-                  onPress={() => handleMoveUp(index)}
-                  hitSlop={8}
-                  disabled={index === 0}
-                >
-                  <Text style={[styles.reorderText, index === 0 && styles.reorderDisabled]}>▲</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => handleMoveDown(index)}
-                  hitSlop={8}
-                  disabled={index === tracks.length - 1}
-                >
-                  <Text style={[styles.reorderText, index === tracks.length - 1 && styles.reorderDisabled]}>▼</Text>
-                </Pressable>
-              </View>
-              <Pressable
-                style={styles.trackInfo}
+        {loading ? (
+          <VStack flex justify="center" align="center">
+            <ActivityIndicator color={palette.ink} size="large" />
+          </VStack>
+        ) : tracks.length === 0 ? (
+          <VStack flex justify="center" align="center" gap="xs">
+            <Text variant="title" align="center">
+              No tracks in this playlist
+            </Text>
+            <Text variant="body" tone="muted" align="center">
+              Tap add to add tracks
+            </Text>
+          </VStack>
+        ) : (
+          <FlatList
+            data={tracks}
+            keyExtractor={(item) => item.playlistTrackId}
+            renderItem={({ item, index }) => (
+              <ListRow
+                title={item.title}
+                subtitle={item.artist ?? undefined}
+                leading={
+                  <VStack gap="xs" align="center">
+                    <IconButton
+                      icon="chevron-up"
+                      accessibilityLabel="Move track up"
+                      onPress={() => handleMoveUp(index)}
+                      disabled={index === 0}
+                      size={16}
+                    />
+                    <IconButton
+                      icon="chevron-down"
+                      accessibilityLabel="Move track down"
+                      onPress={() => handleMoveDown(index)}
+                      disabled={index === tracks.length - 1}
+                      size={16}
+                    />
+                  </VStack>
+                }
+                trailing={
+                  <IconButton
+                    icon="close"
+                    accessibilityLabel="Remove from playlist"
+                    color={palette.inkMuted}
+                    onPress={() =>
+                      Alert.alert("Remove", `Remove "${item.title}" from playlist?`, [
+                        { text: "Cancel", style: "cancel" },
+                        {
+                          text: "Remove",
+                          style: "destructive",
+                          onPress: () => handleRemove(item),
+                        },
+                      ])
+                    }
+                  />
+                }
                 onPress={() => handleTrackPress(item.id)}
                 onLongPress={() => {
                   if (!userId) return;
@@ -181,41 +226,22 @@ export default function PlaylistDetailScreen() {
                     { text: "Cancel", style: "cancel" },
                   ]);
                 }}
-              >
-                <Text style={styles.trackTitle} numberOfLines={1}>
-                  {item.title}
-                </Text>
-                {item.artist ? (
-                  <Text style={styles.trackArtist} numberOfLines={1}>
-                    {item.artist}
-                  </Text>
-                ) : null}
-              </Pressable>
-              <Pressable
-                onPress={() =>
-                  Alert.alert("Remove", `Remove "${item.title}" from playlist?`, [
-                    { text: "Cancel", style: "cancel" },
-                    { text: "Remove", style: "destructive", onPress: () => handleRemove(item) },
-                  ])
-                }
-                hitSlop={8}
-              >
-                <Text style={styles.removeBtn}>✕</Text>
-              </Pressable>
-            </View>
-          )}
-        />
-      )}
+              />
+            )}
+            ItemSeparatorComponent={() => <Divider indent={64} inset="none" />}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
 
-      {/* Track Picker Modal */}
-      <TrackPickerModal
-        visible={showPicker}
-        tracks={libraryTracks}
-        existingTrackIds={tracks.map((t) => t.id)}
-        onClose={() => setShowPicker(false)}
-        onAdd={handleAddTracks}
-      />
-    </View>
+        <TrackPickerModal
+          visible={showPicker}
+          tracks={libraryTracks}
+          existingTrackIds={tracks.map((t) => t.id)}
+          onClose={() => setShowPicker(false)}
+          onAdd={handleAddTracks}
+        />
+      </VStack>
+    </Screen>
   );
 }
 
@@ -251,235 +277,78 @@ function TrackPickerModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
-      <View style={pickerStyles.container}>
-        <View style={pickerStyles.header}>
-          <Pressable onPress={onClose}>
-            <Text style={pickerStyles.cancel}>Cancel</Text>
-          </Pressable>
-          <Text style={pickerStyles.title}>Add Tracks</Text>
-          <Pressable
-            onPress={() => onAdd(Array.from(selected))}
-            disabled={selected.size === 0}
-          >
-            <Text style={[pickerStyles.done, selected.size === 0 && pickerStyles.doneDisabled]}>
-              Add ({selected.size})
-            </Text>
-          </Pressable>
-        </View>
-
-        {available.length === 0 ? (
-          <View style={pickerStyles.center}>
-            <Text style={pickerStyles.emptyText}>All tracks already added</Text>
-          </View>
-        ) : (
-          <FlatList
-            data={available}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <Pressable
-                style={[pickerStyles.item, selected.has(item.id) && pickerStyles.itemSelected]}
-                onPress={() => toggle(item.id)}
-              >
-                <View style={pickerStyles.check}>
-                  <Text style={pickerStyles.checkText}>
-                    {selected.has(item.id) ? "✓" : ""}
-                  </Text>
-                </View>
-                <View style={pickerStyles.info}>
-                  <Text style={pickerStyles.trackTitle} numberOfLines={1}>
-                    {item.title}
-                  </Text>
-                  {item.artist ? (
-                    <Text style={pickerStyles.trackArtist} numberOfLines={1}>
-                      {item.artist}
-                    </Text>
-                  ) : null}
-                </View>
-              </Pressable>
-            )}
+      <Screen scroll={false}>
+        <VStack flex gap="lg">
+          <AppBar
+            title="Add Tracks"
+            onBack={onClose}
+            trailing={
+              <Button
+                label={`Add (${selected.size})`}
+                size="sm"
+                disabled={selected.size === 0}
+                onPress={() => onAdd(Array.from(selected))}
+              />
+            }
           />
-        )}
-      </View>
+
+          {available.length === 0 ? (
+            <VStack flex justify="center" align="center">
+              <Text variant="body" tone="muted">
+                All tracks already added
+              </Text>
+            </VStack>
+          ) : (
+            <FlatList
+              data={available}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <Pressable flat onPress={() => toggle(item.id)}>
+                  <HStack gap="md" padY="md">
+                    <View
+                      style={{
+                        width: 28,
+                        height: 28,
+                        borderRadius: 14,
+                        borderWidth: 2,
+                        borderColor: selected.has(item.id)
+                          ? palette.cobalt
+                          : palette.paperEdge,
+                        justifyContent: "center",
+                        alignItems: "center",
+                        backgroundColor: selected.has(item.id)
+                          ? palette.cobalt
+                          : palette.transparent,
+                      }}
+                    >
+                      {selected.has(item.id) ? (
+                        <Ionicons
+                          name="checkmark"
+                          size={16}
+                          color={palette.inkInverse}
+                        />
+                      ) : null}
+                    </View>
+                    <VStack gap="xs" flex>
+                      <Text variant="bodyStrong" numberOfLines={1}>
+                        {item.title}
+                      </Text>
+                      {item.artist ? (
+                        <Text variant="caption" tone="muted" numberOfLines={1}>
+                          {item.artist}
+                        </Text>
+                      ) : null}
+                    </VStack>
+                  </HStack>
+                </Pressable>
+              )}
+              ItemSeparatorComponent={() => <Divider inset="none" />}
+              contentContainerStyle={{ paddingBottom: space.xl }}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </VStack>
+      </Screen>
     </Modal>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-  },
-  backArrow: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "300",
-  },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "700",
-    flex: 1,
-    textAlign: "center",
-    marginHorizontal: 12,
-  },
-  nameInput: {
-    flex: 1,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 18,
-    color: "#fff",
-    marginHorizontal: 12,
-    borderWidth: 1,
-    borderColor: "#444",
-    textAlign: "center",
-  },
-  addButton: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "500",
-    marginBottom: 6,
-    textAlign: "center",
-  },
-  emptySubtext: {
-    color: "#666",
-    fontSize: 14,
-  },
-  trackRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#222",
-  },
-  reorderBtns: {
-    marginRight: 12,
-    gap: 2,
-  },
-  reorderText: {
-    color: "#888",
-    fontSize: 14,
-  },
-  reorderDisabled: {
-    opacity: 0.2,
-  },
-  trackInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  trackTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  trackArtist: {
-    color: "#888",
-    fontSize: 14,
-    marginTop: 2,
-  },
-  removeBtn: {
-    color: "#666",
-    fontSize: 16,
-    padding: 4,
-  },
-});
-
-const pickerStyles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#333",
-  },
-  title: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "600",
-  },
-  cancel: {
-    color: "#888",
-    fontSize: 16,
-  },
-  done: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  doneDisabled: {
-    opacity: 0.3,
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyText: {
-    color: "#888",
-    fontSize: 16,
-  },
-  item: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#222",
-  },
-  itemSelected: {
-    backgroundColor: "#111",
-  },
-  check: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: "#444",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  checkText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  info: {
-    flex: 1,
-  },
-  trackTitle: {
-    color: "#fff",
-    fontSize: 16,
-  },
-  trackArtist: {
-    color: "#888",
-    fontSize: 14,
-    marginTop: 2,
-  },
-});

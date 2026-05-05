@@ -11,6 +11,7 @@ import {
 } from "expo-file-system/legacy";
 import * as Crypto from "expo-crypto";
 import { useFocusEffect, useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActionSheetIOS,
@@ -19,15 +20,26 @@ import {
   FlatList,
   Modal,
   Platform,
-  Pressable,
   SectionList,
-  StyleSheet,
-  Text,
-  TextInput,
   View,
 } from "react-native";
 import EditTrackModal from "../../components/EditTrackModal";
 import TrackItem from "../../components/TrackItem";
+import {
+  AppBar,
+  Button,
+  Divider,
+  HStack,
+  IconButton,
+  Input,
+  Pressable,
+  Screen,
+  Surface,
+  Text,
+  VStack,
+  palette,
+  space,
+} from "../../components/ui";
 import { getDb } from "../../lib/db";
 import { buildContentKey, getUploadUrl } from "../../lib/r2";
 import { ensureLocalCopy } from "../../lib/localAudio";
@@ -375,111 +387,113 @@ export default function LibraryScreen() {
   const trackCountLabel = trackCount === 1 ? "1 track" : `${trackCount} tracks`;
   const isSearching = search.trim().length > 0;
 
-  return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>Library</Text>
-          {trackCount > 0 && (
-            <Text style={styles.headerSubtitle}>{trackCountLabel}</Text>
-          )}
-        </View>
-        <Pressable
-          style={styles.sortPill}
-          onPress={showSortPicker}
-          android_ripple={{ color: "rgba(255,255,255,0.1)", borderless: true }}
-        >
-          <Text style={styles.sortButton}>{SORT_LABELS[sort]} ▾</Text>
-        </Pressable>
-      </View>
+  const footer = (
+    <Surface tone="raised" rounded="none" pad="md" bordered>
+      <Button
+        label={importing ? "Importing" : "Add track"}
+        onPress={handleImport}
+        disabled={importing}
+        block
+        leading={
+          importing ? (
+            <ActivityIndicator color={palette.inkInverse} />
+          ) : (
+            <Ionicons name="add" size={20} color={palette.inkInverse} />
+          )
+        }
+      />
+    </Surface>
+  );
 
-      {trackList.length > 0 && (
-        <View style={styles.searchRow}>
-          <TextInput
-            style={styles.searchInput}
+  return (
+    <Screen scroll={false} footer={footer}>
+      <VStack flex gap="lg">
+        <HStack justify="between" align="center">
+          <VStack gap="xs">
+            <Text variant="titleLg">Library</Text>
+            {trackCount > 0 ? (
+              <Text variant="caption" tone="muted">
+                {trackCountLabel}
+              </Text>
+            ) : null}
+          </VStack>
+          <View>
+            <Button
+              label={SORT_LABELS[sort]}
+              variant="secondary"
+              size="sm"
+              onPress={showSortPicker}
+            />
+          </View>
+        </HStack>
+
+        {trackList.length > 0 ? (
+          <Input
+            variant="search"
             value={search}
             onChangeText={setSearch}
-            placeholder="Search title or artist…"
-            placeholderTextColor="#555"
+            placeholder="Search title or artist..."
             autoCorrect={false}
             autoCapitalize="none"
             returnKeyType="search"
             clearButtonMode="while-editing"
           />
-          {isSearching && Platform.OS !== "ios" && (
-            <Pressable
-              style={styles.searchClear}
-              onPress={() => setSearch("")}
-              android_ripple={{ color: "rgba(255,255,255,0.1)", borderless: true }}
-            >
-              <Text style={styles.searchClearText}>×</Text>
-            </Pressable>
-          )}
-        </View>
-      )}
+        ) : null}
 
-      {isLoading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color="#fff" size="large" />
-        </View>
-      ) : trackList.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyText}>No tracks yet</Text>
-          <Text style={styles.emptySubtext}>
-            Tap "Add track" to import audio files
-          </Text>
-        </View>
-      ) : filteredTracks.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={styles.emptyText}>No matches</Text>
-          <Text style={styles.emptySubtext}>
-            Nothing matches "{search.trim()}"
-          </Text>
-        </View>
-      ) : (
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => item.id}
-          renderSectionHeader={({ section: { title } }) =>
-            title ? (
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionHeaderText}>{title}</Text>
-              </View>
-            ) : null
-          }
-          renderItem={({ item }) => (
-            <TrackItem
-              track={item}
-              onPress={() => {
-                if (!userId) return;
-                const idx = trackList.findIndex((t) => t.id === item.id);
-                usePlayerStore
-                  .getState()
-                  .playWithQueue(trackList, Math.max(0, idx), userId);
-              }}
-              onLongPress={() => showTrackActions(item)}
-            />
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          contentContainerStyle={styles.listContent}
-          stickySectionHeadersEnabled={false}
-        />
-      )}
-
-      {importing ? (
-        <View style={styles.fab}>
-          <ActivityIndicator color="#000" />
-        </View>
-      ) : (
-        <Pressable
-          style={styles.fab}
-          onPress={handleImport}
-          android_ripple={{ color: "rgba(0,0,0,0.15)" }}
-        >
-          <Text style={styles.fabIcon}>+</Text>
-          <Text style={styles.fabLabel}>Add track</Text>
-        </Pressable>
-      )}
+        {isLoading ? (
+          <VStack flex justify="center" align="center">
+            <ActivityIndicator color={palette.ink} size="large" />
+          </VStack>
+        ) : trackList.length === 0 ? (
+          <VStack flex justify="center" align="center" gap="xs">
+            <Text variant="title" align="center">
+              No tracks yet
+            </Text>
+            <Text variant="body" tone="muted" align="center">
+              Tap Add track to import audio files
+            </Text>
+          </VStack>
+        ) : filteredTracks.length === 0 ? (
+          <VStack flex justify="center" align="center" gap="xs">
+            <Text variant="title" align="center">
+              No matches
+            </Text>
+            <Text variant="body" tone="muted" align="center">
+              Nothing matches "{search.trim()}"
+            </Text>
+          </VStack>
+        ) : (
+          <SectionList
+            sections={sections}
+            keyExtractor={(item) => item.id}
+            renderSectionHeader={({ section: { title } }) =>
+              title ? (
+                <View style={{ paddingTop: space.lg, paddingBottom: space.sm }}>
+                  <Text variant="eyebrow" tone="muted">
+                    {title}
+                  </Text>
+                </View>
+              ) : null
+            }
+            renderItem={({ item }) => (
+              <TrackItem
+                track={item}
+                onPress={() => {
+                  if (!userId) return;
+                  const idx = trackList.findIndex((t) => t.id === item.id);
+                  usePlayerStore
+                    .getState()
+                    .playWithQueue(trackList, Math.max(0, idx), userId);
+                }}
+                onLongPress={() => showTrackActions(item)}
+              />
+            )}
+            ItemSeparatorComponent={() => <Divider indent={64} inset="none" />}
+            contentContainerStyle={{ paddingBottom: space.xl }}
+            stickySectionHeadersEnabled={false}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
 
       <EditTrackModal
         track={editingTrack}
@@ -496,275 +510,67 @@ export default function LibraryScreen() {
         presentationStyle="formSheet"
         onRequestClose={() => setPlaylistPickerTrack(null)}
       >
-        <View style={styles.pickerContainer}>
-          <View style={styles.pickerHeader}>
-            <Pressable onPress={() => setPlaylistPickerTrack(null)}>
-              <Text style={styles.pickerCancel}>Cancel</Text>
-            </Pressable>
-            <Text style={styles.pickerTitle}>Add to Playlist</Text>
-            <View style={{ width: 50 }} />
-          </View>
+        <Screen scroll={false}>
+          <VStack flex gap="lg">
+            <AppBar
+              title="Add to Playlist"
+              onBack={() => setPlaylistPickerTrack(null)}
+            />
 
-          <FlatList
-            data={playlistList}
-            keyExtractor={(item) => item.id}
-            ListHeaderComponent={
-              <View style={styles.newPlaylistRow}>
-                <TextInput
-                  style={styles.newPlaylistInput}
+            <HStack gap="sm">
+              <View style={{ flex: 1 }}>
+                <Input
                   value={newPlaylistName}
                   onChangeText={setNewPlaylistName}
                   placeholder="New playlist name..."
-                  placeholderTextColor="#666"
                   returnKeyType="done"
                   onSubmitEditing={handleCreateAndAdd}
                 />
+              </View>
+              <Button
+                label={creatingPlaylist ? "Creating" : "Create"}
+                onPress={handleCreateAndAdd}
+                disabled={!newPlaylistName.trim() || creatingPlaylist}
+                leading={
+                  creatingPlaylist ? (
+                    <ActivityIndicator color={palette.inkInverse} size="small" />
+                  ) : null
+                }
+              />
+            </HStack>
+
+            <FlatList
+              data={playlistList}
+              keyExtractor={(item) => item.id}
+              ListEmptyComponent={
+                <VStack padY="xl" align="center">
+                  <Text variant="body" tone="muted">
+                    No playlists yet
+                  </Text>
+                </VStack>
+              }
+              renderItem={({ item }) => (
                 <Pressable
-                  style={[
-                    styles.newPlaylistButton,
-                    (!newPlaylistName.trim() || creatingPlaylist) &&
-                      styles.newPlaylistButtonDisabled,
-                  ]}
-                  onPress={handleCreateAndAdd}
-                  disabled={!newPlaylistName.trim() || creatingPlaylist}
+                  flat
+                  onPress={() => handlePickPlaylist(item.id, item.name)}
+                  android_ripple={{ color: palette.paperSunken }}
                 >
-                  {creatingPlaylist ? (
-                    <ActivityIndicator color="#000" size="small" />
-                  ) : (
-                    <Text style={styles.newPlaylistButtonText}>Create</Text>
-                  )}
+                  <HStack justify="between" padY="md">
+                    <Text variant="bodyStrong">{item.name}</Text>
+                    <Text variant="caption" tone="muted">
+                      {item.trackCount}{" "}
+                      {item.trackCount === 1 ? "track" : "tracks"}
+                    </Text>
+                  </HStack>
                 </Pressable>
-              </View>
-            }
-            ListEmptyComponent={
-              <View style={styles.pickerEmpty}>
-                <Text style={styles.pickerEmptyText}>No playlists yet</Text>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <Pressable
-                style={styles.pickerRow}
-                onPress={() => handlePickPlaylist(item.id, item.name)}
-              >
-                <Text style={styles.pickerRowText}>{item.name}</Text>
-                <Text style={styles.pickerRowCount}>
-                  {item.trackCount} {item.trackCount === 1 ? "track" : "tracks"}
-                </Text>
-              </Pressable>
-            )}
-          />
-        </View>
+              )}
+              ItemSeparatorComponent={() => <Divider inset="none" />}
+              showsVerticalScrollIndicator={false}
+            />
+          </VStack>
+        </Screen>
       </Modal>
-    </View>
+      </VStack>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
-  },
-  headerTitle: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "700",
-  },
-  headerSubtitle: {
-    color: "#666",
-    fontSize: 13,
-    marginTop: 2,
-  },
-  sortPill: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "#1a1a1a",
-  },
-  sortButton: {
-    color: "#999",
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  searchRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
-  searchInput: {
-    flex: 1,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: "#fff",
-    borderWidth: 1,
-    borderColor: "#222",
-  },
-  searchClear: {
-    marginLeft: 8,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  searchClearText: {
-    color: "#888",
-    fontSize: 22,
-    lineHeight: 24,
-  },
-  sectionHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-    paddingBottom: 8,
-  },
-  sectionHeaderText: {
-    color: "#666",
-    fontSize: 12,
-    fontWeight: "600",
-    textTransform: "uppercase",
-    letterSpacing: 0.8,
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: "#1a1a1a",
-    marginLeft: 78,
-  },
-  listContent: {
-    paddingBottom: 100,
-  },
-  center: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  emptyText: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "500",
-    marginBottom: 6,
-  },
-  emptySubtext: {
-    color: "#666",
-    fontSize: 14,
-  },
-  fab: {
-    position: "absolute",
-    bottom: 32,
-    right: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    height: 48,
-    paddingHorizontal: 20,
-    borderRadius: 24,
-    backgroundColor: "#fff",
-    elevation: 6,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    gap: 6,
-  },
-  fabIcon: {
-    fontSize: 22,
-    fontWeight: "500",
-    color: "#000",
-    marginTop: -1,
-  },
-  fabLabel: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#000",
-  },
-  pickerContainer: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  pickerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#333",
-  },
-  pickerTitle: {
-    color: "#fff",
-    fontSize: 17,
-    fontWeight: "600",
-  },
-  pickerCancel: {
-    color: "#888",
-    fontSize: 16,
-  },
-  newPlaylistRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#333",
-  },
-  newPlaylistInput: {
-    flex: 1,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: "#fff",
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  newPlaylistButton: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  newPlaylistButtonDisabled: {
-    opacity: 0.3,
-  },
-  newPlaylistButtonText: {
-    color: "#000",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  pickerEmpty: {
-    paddingVertical: 32,
-    alignItems: "center",
-  },
-  pickerEmptyText: {
-    color: "#666",
-    fontSize: 15,
-  },
-  pickerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#1a1a1a",
-  },
-  pickerRowText: {
-    color: "#fff",
-    fontSize: 16,
-  },
-  pickerRowCount: {
-    color: "#666",
-    fontSize: 13,
-  },
-});

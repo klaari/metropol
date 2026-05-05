@@ -1,19 +1,22 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-} from "react-native";
+import { ActivityIndicator, Alert } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Updates from "expo-updates";
 import { useAuth } from "@clerk/clerk-expo";
 import { backfillLocalCache, clearLocalCache, getCacheSizeBytes } from "../../lib/localAudio";
 import { type DiscogsSyncStatus, useDiscogsSyncStore } from "../../store/discogsSync";
+import {
+  Button,
+  ContentBlock,
+  HStack,
+  Inline,
+  PageSection,
+  Screen,
+  Text,
+  VStack,
+  palette,
+} from "../../components/ui";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -249,319 +252,168 @@ export default function SettingsScreen() {
     }
   }
 
-  return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.heading}>Settings</Text>
+  const statusTone = (tone: StatusInfo["tone"]) => {
+    if (tone === "ok") return "positive" as const;
+    if (tone === "error") return "critical" as const;
+    return "muted" as const;
+  };
 
-      {/* YouTube Cookies */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>YouTube Cookies</Text>
-        <Text style={styles.description}>
+  return (
+    <Screen>
+      <VStack gap="xl">
+        <Text variant="titleLg">Settings</Text>
+
+        <PageSection eyebrow="YouTube" title="Cookies">
+          <ContentBlock>
+            <Text variant="body" tone="muted">
           Upload a cookies.txt file from your browser to authenticate YouTube
           downloads. Use a browser extension like "Get cookies.txt LOCALLY" to
           export your YouTube cookies.
-        </Text>
+            </Text>
 
-        <View style={styles.statusRow}>
-          <Text style={styles.statusLabel}>Status:</Text>
+        <Inline>
+          <Text variant="body" tone="muted">Status</Text>
           {cookieStatus === null ? (
-            <Text style={styles.statusChecking}>Checking...</Text>
+            <Text variant="caption" tone="muted" italic>Checking...</Text>
           ) : cookieStatus ? (
-            <Text style={styles.statusLoaded}>Cookies loaded</Text>
+            <Text variant="bodyStrong" tone="positive">Cookies loaded</Text>
           ) : (
-            <Text style={styles.statusNotLoaded}>
+            <Text variant="bodyStrong" tone="warning">
               No cookies — downloads may fail
             </Text>
           )}
-        </View>
+        </Inline>
 
-        <Pressable
-          style={[styles.uploadButton, uploading && styles.buttonDisabled]}
+        <Button
+          label={uploading ? "Uploading" : "Upload cookies.txt"}
           onPress={handleUploadCookies}
           disabled={uploading}
-        >
-          {uploading ? (
-            <ActivityIndicator color="#000" size="small" />
-          ) : (
-            <Text style={styles.uploadButtonText}>Upload cookies.txt</Text>
-          )}
-        </Pressable>
+          leading={uploading ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
+        />
 
         {statusMessage && (
-          <Text style={[styles.statusMsg, isError && styles.statusMsgError]}>
+          <Text variant="caption" tone={isError ? "critical" : "positive"} align="center">
             {statusMessage}
           </Text>
         )}
-      </View>
+          </ContentBlock>
+        </PageSection>
 
-      {/* Local audio */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Local audio</Text>
-        <Text style={styles.description}>
+        <PageSection eyebrow="Storage" title="Local audio">
+          <ContentBlock>
+        <Text variant="body" tone="muted">
           Tracks are downloaded to this device so playback starts instantly.
           New tracks download in the background.
         </Text>
-        <View style={styles.statusRow}>
-          <Text style={styles.statusLabel}>Used:</Text>
-          <Text style={styles.statusLoaded}>{formatBytes(cacheBytes)}</Text>
-        </View>
-        <Pressable
-          style={[styles.smallButton, downloading && styles.buttonDisabled]}
+        <Inline>
+          <Text variant="body" tone="muted">Used</Text>
+          <Text variant="numeric" tone="positive">{formatBytes(cacheBytes)}</Text>
+        </Inline>
+        <HStack gap="md">
+        <Button
+          label={downloading ? "Downloading" : "Download all"}
+          size="sm"
           onPress={handleDownloadAll}
           disabled={downloading}
-        >
-          {downloading ? (
-            <ActivityIndicator color="#000" size="small" />
-          ) : (
-            <Text style={styles.smallButtonText}>Download all</Text>
-          )}
-        </Pressable>
-        <Pressable
+          leading={downloading ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
+        />
+        <Button
+          label={clearing ? "Clearing" : "Clear cache"}
+          size="sm"
+          variant="destructive"
           onPress={handleClearCache}
           disabled={clearing}
-          hitSlop={6}
-          style={styles.linkBtn}
-        >
-          {clearing ? (
-            <ActivityIndicator color="#666" size="small" />
-          ) : (
-            <Text style={styles.linkBtnText}>Clear cache</Text>
-          )}
-        </Pressable>
-      </View>
+          leading={clearing ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
+        />
+        </HStack>
+          </ContentBlock>
+        </PageSection>
 
-      {/* Discogs sync */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Discogs sync</Text>
-        <Text style={styles.description}>
+        <PageSection eyebrow="Discogs" title="Sync">
+          <ContentBlock>
+        <Text variant="body" tone="muted">
           Mirror your Discogs collection and wantlist locally so search and
           auto-match are instant. Full sync rebuilds; quick sync only fetches
           recent additions.
         </Text>
-        <View style={styles.statusRow}>
-          <Text style={styles.statusLabel}>Local mirror:</Text>
+        <Inline align="start">
+          <Text variant="body" tone="muted">Local mirror</Text>
           {discogsCountsLoading && !discogsCounts ? (
-            <Text style={styles.statusChecking}>Checking...</Text>
+            <Text variant="caption" tone="muted" italic>Checking...</Text>
           ) : discogsCounts ? (
-            <Text style={styles.statusLoaded}>
+            <Text variant="caption" tone="positive">
               {discogsCounts.collection} collection · {discogsCounts.wantlist} wantlist
             </Text>
           ) : (
-            <Text style={styles.statusNotLoaded}>Not synced yet</Text>
+            <Text variant="caption" tone="warning">Not synced yet</Text>
           )}
-        </View>
-        <View style={styles.buttonRow}>
-          <Pressable
-            style={[
-              styles.smallButton,
-              (syncStarting || discogsStatus.state === "running") && styles.buttonDisabled,
-            ]}
+        </Inline>
+        <HStack gap="md">
+          <Button
+            label="Full sync"
+            size="sm"
             onPress={() => handleDiscogsSync({ incremental: false })}
             disabled={syncStarting || discogsStatus.state === "running"}
-          >
-            {syncStarting && discogsStatus.state !== "running" ? (
-              <ActivityIndicator color="#000" size="small" />
-            ) : (
-              <Text style={styles.smallButtonText}>Full sync</Text>
-            )}
-          </Pressable>
-          <Pressable
+            leading={syncStarting && discogsStatus.state !== "running" ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
+          />
+          <Button
+            label="Quick sync"
+            size="sm"
+            variant="secondary"
             onPress={() => handleDiscogsSync({ incremental: true })}
             disabled={syncStarting || discogsStatus.state === "running"}
-            hitSlop={6}
-            style={styles.linkBtn}
-          >
-            <Text style={styles.linkBtnText}>Quick sync</Text>
-          </Pressable>
-        </View>
+          />
+        </HStack>
         {discogsStatusInfo && (
           <Text
-            style={[
-              styles.statusMsg,
-              discogsStatusInfo.tone === "error" && styles.statusMsgError,
-              discogsStatusInfo.tone === "muted" && styles.statusMsgMuted,
-            ]}
+            variant="caption"
+            tone={statusTone(discogsStatusInfo.tone)}
+            align="center"
           >
             {discogsStatusInfo.text}
           </Text>
         )}
         {syncError && (
-          <Text style={[styles.statusMsg, styles.statusMsgError]}>{syncError}</Text>
+          <Text variant="caption" tone="critical" align="center">{syncError}</Text>
         )}
-      </View>
+          </ContentBlock>
+        </PageSection>
 
-      {/* App Updates */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>App version</Text>
-        <Text style={styles.versionLine}>
+        <PageSection eyebrow="App" title="Version">
+          <ContentBlock>
+        <Text variant="numeric" tone="muted">
           Update ID: {Updates.updateId ? Updates.updateId.slice(0, 8) : "embedded"}
         </Text>
-        <Text style={styles.versionLine}>
+        <Text variant="numeric" tone="muted">
           Created: {Updates.createdAt ? Updates.createdAt.toISOString().slice(0, 19).replace("T", " ") : "—"}
         </Text>
-        <Text style={styles.versionLine}>
+        <Text variant="numeric" tone="muted">
           Channel: {Updates.channel || "—"}
         </Text>
-        <Pressable style={styles.smallButton} onPress={checkForUpdate}>
-          {checking ? (
-            <ActivityIndicator color="#000" size="small" />
-          ) : (
-            <Text style={styles.smallButtonText}>Check for updates</Text>
-          )}
-        </Pressable>
+        <Button
+          label={checking ? "Checking" : "Check for updates"}
+          size="sm"
+          onPress={checkForUpdate}
+          disabled={checking}
+          leading={checking ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
+        />
         {updateMessage && (
-          <Text style={[styles.statusMsg, updateError && styles.statusMsgError]}>
+          <Text variant="caption" tone={updateError ? "critical" : "positive"} align="center">
             {updateMessage}
           </Text>
         )}
-      </View>
+          </ContentBlock>
+        </PageSection>
 
-      {/* Sign Out */}
-      <View style={styles.section}>
-        <Pressable style={styles.signOutButton} onPress={() => signOut()}>
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </Pressable>
-      </View>
-    </ScrollView>
+        <PageSection>
+          <Button
+            label="Sign Out"
+            variant="destructive"
+            onPress={() => signOut()}
+            block
+          />
+        </PageSection>
+      </VStack>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-    paddingHorizontal: 16,
-  },
-  heading: {
-    color: "#fff",
-    fontSize: 28,
-    fontWeight: "700",
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  description: {
-    color: "#888",
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-    gap: 8,
-  },
-  statusLabel: {
-    color: "#888",
-    fontSize: 14,
-  },
-  statusChecking: {
-    color: "#888",
-    fontSize: 14,
-    fontStyle: "italic",
-  },
-  statusLoaded: {
-    color: "#4cd964",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  statusNotLoaded: {
-    color: "#f5a623",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  uploadButton: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 14,
-    alignItems: "center",
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  uploadButtonText: {
-    color: "#000",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  statusMsg: {
-    color: "#4cd964",
-    fontSize: 13,
-    marginTop: 8,
-    textAlign: "center",
-  },
-  statusMsgError: {
-    color: "#ff3b30",
-  },
-  statusMsgMuted: {
-    color: "#888",
-  },
-  buttonRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  versionLine: {
-    color: "#888",
-    fontSize: 13,
-    fontFamily: "monospace",
-    marginBottom: 4,
-  },
-  checkButton: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 14,
-    alignItems: "center",
-    marginTop: 12,
-  },
-  checkButtonText: {
-    color: "#000",
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  smallButton: {
-    alignSelf: "flex-start",
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    marginTop: 8,
-  },
-  smallButtonText: {
-    color: "#000",
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  linkBtn: {
-    alignSelf: "flex-start",
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    marginTop: 4,
-  },
-  linkBtnText: {
-    color: "#888",
-    fontSize: 13,
-    textDecorationLine: "underline",
-  },
-  signOutButton: {
-    borderWidth: 1,
-    borderColor: "#333",
-    borderRadius: 10,
-    padding: 14,
-    alignItems: "center",
-  },
-  signOutText: {
-    color: "#ff3b30",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});
