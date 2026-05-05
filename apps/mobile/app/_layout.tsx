@@ -5,10 +5,11 @@ import { tokenCache } from "@clerk/clerk-expo/token-cache";
 import { ErrorBoundary } from "expo-router";
 import { Slot } from "expo-router";
 import React, { useEffect } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import DiscogsMatchBanner from "../components/DiscogsMatchBanner";
 import QueueSheet from "../components/QueueSheet";
+import { Text, palette, space } from "../components/ui";
 import { backfillLocalCache } from "../lib/localAudio";
 import { attachQueueListeners, registerPlaybackService, setupPlayer } from "../lib/trackPlayer";
 import { useDownloadWs } from "../hooks/useDownloadWs";
@@ -41,20 +42,31 @@ function ClerkGate() {
 
   if (!isLoaded) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#000" }}>
-        <ActivityIndicator color="#fff" size="large" />
-        <Text style={{ color: "#888", marginTop: 16 }}>Loading auth...</Text>
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          backgroundColor: palette.paper,
+        }}
+      >
+        <ActivityIndicator color={palette.ink} size="large" />
+        <View style={{ marginTop: space.base }}>
+          <Text variant="caption" tone="muted">
+            Loading auth...
+          </Text>
+        </View>
       </View>
     );
   }
 
   return (
-    <>
+    <View style={{ flex: 1, backgroundColor: palette.paper }}>
       {isSignedIn && <AuthenticatedHooks />}
       <Slot />
       {isSignedIn && <QueueSheet />}
       {isSignedIn && <DiscogsMatchBanner />}
-    </>
+    </View>
   );
 }
 
@@ -73,7 +85,7 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: palette.paper }}>
       <ClerkProvider publishableKey={publishableKey} tokenCache={tokenCache}>
         <ClerkGate />
       </ClerkProvider>

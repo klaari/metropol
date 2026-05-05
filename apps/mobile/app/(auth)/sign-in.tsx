@@ -1,16 +1,17 @@
 import { isClerkAPIResponseError, useSignIn } from "@clerk/clerk-expo";
 import { Link, useRouter } from "expo-router";
 import { useState } from "react";
+import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from "react-native";
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
+  Button,
+  Field,
+  Input,
   Pressable,
-  StyleSheet,
+  Screen,
   Text,
-  TextInput,
-  View,
-} from "react-native";
+  VStack,
+  palette,
+} from "../../components/ui";
 
 export default function SignInScreen() {
   const { signIn, setActive, isLoaded } = useSignIn();
@@ -54,125 +55,70 @@ export default function SignInScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <View style={styles.inner}>
-        <Text style={styles.title}>Aani</Text>
-        <Text style={styles.subtitle}>Sign in to continue</Text>
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#666"
-          autoCapitalize="none"
-          autoComplete="email"
-          keyboardType="email-address"
-          value={email}
-          onChangeText={setEmail}
-        />
-
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#666"
-          secureTextEntry
-          autoComplete="password"
-          value={password}
-          onChangeText={setPassword}
-        />
-
-        <Pressable
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleSignIn}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#000" />
-          ) : (
-            <Text style={styles.buttonText}>Sign In</Text>
-          )}
-        </Pressable>
-
-        <Link href="/(auth)/sign-up" asChild>
-          <Pressable style={styles.link}>
-            <Text style={styles.linkText}>
-              Don't have an account? <Text style={styles.linkBold}>Sign up</Text>
+    <Screen scroll={false}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        <VStack flex justify="center" gap="xl">
+          <VStack gap="xs" align="center">
+            <Text variant="display" align="center">
+              Aani
             </Text>
-          </Pressable>
-        </Link>
-      </View>
-    </KeyboardAvoidingView>
+            <Text variant="body" tone="muted" align="center">
+              Sign in to continue
+            </Text>
+          </VStack>
+
+          <VStack gap="md">
+            {error ? (
+              <Text variant="caption" tone="critical" align="center">
+                {error}
+              </Text>
+            ) : null}
+
+            <Field label="Email">
+              <Input
+                placeholder="Email"
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+              />
+            </Field>
+
+            <Field label="Password">
+              <Input
+                variant="password"
+                placeholder="Password"
+                autoComplete="password"
+                value={password}
+                onChangeText={setPassword}
+              />
+            </Field>
+
+            <Button
+              label={loading ? "Signing in" : "Sign In"}
+              onPress={handleSignIn}
+              disabled={loading}
+              block
+              leading={loading ? <ActivityIndicator color={palette.inkInverse} /> : null}
+            />
+          </VStack>
+
+          <Link href="/(auth)/sign-up" asChild>
+            <Pressable flat>
+              <View style={{ alignItems: "center" }}>
+                <Text variant="body" tone="muted" align="center">
+                  Don't have an account?{" "}
+                  <Text variant="bodyStrong">Sign up</Text>
+                </Text>
+              </View>
+            </Pressable>
+          </Link>
+        </VStack>
+      </KeyboardAvoidingView>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  inner: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: "700",
-    color: "#fff",
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#888",
-    textAlign: "center",
-    marginBottom: 32,
-  },
-  error: {
-    color: "#ef4444",
-    fontSize: 14,
-    textAlign: "center",
-    marginBottom: 16,
-  },
-  input: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 10,
-    padding: 16,
-    fontSize: 16,
-    color: "#fff",
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  button: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 16,
-    alignItems: "center",
-    marginTop: 8,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#000",
-  },
-  link: {
-    marginTop: 24,
-    alignItems: "center",
-  },
-  linkText: {
-    color: "#888",
-    fontSize: 14,
-  },
-  linkBold: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-});

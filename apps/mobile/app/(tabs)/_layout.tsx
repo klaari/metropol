@@ -4,6 +4,7 @@ import { BottomTabBar } from "@react-navigation/bottom-tabs";
 import { Redirect, Tabs } from "expo-router";
 import { View } from "react-native";
 import MiniPlayer from "../../components/MiniPlayer";
+import { border, palette } from "../../components/ui";
 
 export default function TabsLayout() {
   const { isSignedIn } = useAuth();
@@ -15,7 +16,7 @@ export default function TabsLayout() {
   return (
     <Tabs
       tabBar={(props) => (
-        <View>
+        <View style={{ backgroundColor: palette.paperRaised }}>
           <MiniPlayer />
           <BottomTabBar {...props} />
         </View>
@@ -23,19 +24,24 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: "#000",
-          borderTopColor: "#222",
+          backgroundColor: palette.paperRaised,
+          borderTopColor: palette.paperEdge,
+          borderTopWidth: border.hair,
         },
-        tabBarActiveTintColor: "#fff",
-        tabBarInactiveTintColor: "#555",
+        tabBarActiveTintColor: palette.ink,
+        tabBarInactiveTintColor: palette.inkMuted,
       }}
     >
       <Tabs.Screen
         name="library"
         options={{
           title: "Library",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="musical-notes" color={color} size={size} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "musical-notes" : "musical-notes-outline"}
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -43,8 +49,12 @@ export default function TabsLayout() {
         name="playlists"
         options={{
           title: "Playlists",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" color={color} size={size} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "list" : "list-outline"}
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -52,8 +62,12 @@ export default function TabsLayout() {
         name="downloads"
         options={{
           title: "Downloads",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="cloud-download" color={color} size={size} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "cloud-download" : "cloud-download-outline"}
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
@@ -61,8 +75,12 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: "Settings",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" color={color} size={size} />
+          tabBarIcon: ({ color, size, focused }) => (
+            <Ionicons
+              name={focused ? "settings" : "settings-outline"}
+              color={color}
+              size={size}
+            />
           ),
         }}
       />
