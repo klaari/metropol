@@ -12,6 +12,7 @@ interface ListRowProps {
   /** Trailing slot — counter, chevron, or single icon button. */
   trailing?: ReactNode;
   onPress?: () => void;
+  onLongPress?: () => void;
 }
 
 /**
@@ -25,6 +26,7 @@ export function ListRow({
   leading,
   trailing,
   onPress,
+  onLongPress,
 }: ListRowProps) {
   const Body = (
     <View
@@ -51,11 +53,12 @@ export function ListRow({
     </View>
   );
 
-  if (!onPress) return Body;
+  if (!onPress && !onLongPress) return Body;
 
   return (
     <Pressable
       onPress={onPress}
+      onLongPress={onLongPress}
       flat
       android_ripple={{ color: palette.paperSunken }}
     >

@@ -10,6 +10,7 @@
     "build:preview": "eas build --profile preview --platform android",
     "update:preview": "eas update --channel preview",
     "check-types": "tsc --noEmit",
+    "lint": "../../scripts/check-design-system.sh",
     "postinstall": "patch-package"
   },
   "dependencies": {

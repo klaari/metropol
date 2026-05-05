@@ -166,3 +166,4 @@ EXPO_PUBLIC_R2_BUCKET=
 - When implementing UI:
   - follow UI_RULES.md
   - follow UI_ARCHITECTURE.md
+  - use the design-system primitives from `apps/mobile/components/ui`
