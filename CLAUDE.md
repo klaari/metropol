@@ -1,5 +1,7 @@
 # Aani — Claude Code Context
 
+See AGENTS.md for universal implementation constraints.
+
 ## What This App Is
 A personal mobile music player with tempo/pitch control, live BPM display,
 playlist management, and cloud backup. Built for personal use by a single user.
@@ -17,22 +19,74 @@ Named: Aani (domain: aani.cc).
 - **Runtime:** Bun (Phase 2+)
 
 ## Monorepo Structure
+Turborepo workspace. Only `apps/mobile` ships today; `apps/api` and
+`apps/web` are reserved for Phase 2 and don't exist yet.
+
 ```
 aani/
 ├── apps/
-│   └── mobile/               → Expo app
-│       ├── app/              → Expo Router file-based routes
-│       │   ├── (auth)/       → Unauthenticated screens
-│       │   ├── (tabs)/       → Main authenticated app
-│       │   └── player/       → Player screen
-│       ├── components/       → UI components
-│       ├── store/            → Zustand stores
-│       ├── hooks/            → Custom hooks
-│       └── lib/              → Clients: db, r2, clerk
+│   └── mobile/                        → Expo app (only shipping app right now)
+│       ├── app/                       → Expo Router file-based routes
+│       │   ├── _layout.tsx              root layout (Clerk + GestureHandler)
+│       │   ├── index.tsx                auth gate / redirect
+│       │   ├── (auth)/                  unauthenticated group
+│       │   │   ├── _layout.tsx
+│       │   │   ├── sign-in.tsx
+│       │   │   └── sign-up.tsx
+│       │   ├── (tabs)/                  main authenticated app
+│       │   │   ├── _layout.tsx          tab bar
+│       │   │   ├── library.tsx          track list
+│       │   │   ├── playlists/           index.tsx + [id].tsx
+│       │   │   ├── downloads.tsx        download jobs
+│       │   │   └── settings.tsx
+│       │   └── player/[id].tsx        full-screen player
+│       ├── components/                → composed components (layer 3)
+│       │   │                            Domain-aware: knows about tracks,
+│       │   │                            playlists, sheets, the player.
+│       │   │                            Built from primitives. Examples:
+│       │   │                            MiniPlayer, QueueSheet, TrackItem,
+│       │   │                            DiscogsSheet, EditTrackModal.
+│       │   └── ui/                    → primitives (layer 2). See
+│       │                                UI_ARCHITECTURE.md for the full
+│       │                                catalogue. Flat directory, no
+│       │                                subfolders.
+│       ├── design/                    → tokens (layer 1)
+│       │   ├── raw.js                   CommonJS source of truth — required
+│       │   │                            by both tailwind.config.js and
+│       │   │                            tokens.ts so the two cannot drift
+│       │   └── tokens.ts                TS surface; adds RN-shaped tokens
+│       │                                (motion, elevation, layout, icon, z)
+│       ├── store/                     → Zustand stores, one per domain
+│       │                                (player, library, playlists,
+│       │                                downloads, discogsMatch, discogsSync)
+│       ├── hooks/                     → custom hooks (use* prefix)
+│       ├── lib/                       → clients & utilities
+│       │                                api, db, r2, trackPlayer,
+│       │                                localAudio, cn (className helper)
+│       ├── tailwind.config.js         → consumes design/raw.js
+│       ├── global.css                 → NativeWind entry
+│       ├── metro.config.js            → Metro + NativeWind
+│       ├── babel.config.js            → Expo + NativeWind
+│       ├── android/, ios/             → native projects (EAS managed)
+│       ├── app.json, eas.json         → Expo + EAS config
+│       └── patches/                   → patch-package patches
 └── packages/
-    ├── db/                   → Drizzle schema + migrations
-    └── types/                → Shared TypeScript interfaces
+    ├── db/                            → Drizzle schema + migrations
+    │   ├── src/                         schema.ts, client.ts, index.ts
+    │   ├── drizzle/                     hand-rolled NNNN_*.sql migration files
+    │   └── scripts/                     db:apply / db:apply:dry / db:bootstrap
+    └── types/                         → shared TypeScript interfaces (src/index.ts)
 ```
+
+**UI layer model** (see `UI_ARCHITECTURE.md` for full detail):
+
+```
+design/  →  components/ui/  →  components/  →  app/
+tokens       primitives        composed         screens
+```
+
+Imports flow downward; nothing skips a layer. Screens compose primitives,
+not raw RN. Hex literals and px values live only in `design/`.
 
 ## Conventions
 - DB migrations: write hand-rolled SQL files in `packages/db/drizzle/NNNN_*.sql`
@@ -104,3 +158,11 @@ EXPO_PUBLIC_R2_ACCESS_KEY=
 EXPO_PUBLIC_R2_SECRET_KEY=
 EXPO_PUBLIC_R2_BUCKET=
 ```
+
+## AI Workflow
+
+- Use planning/review agents for architecture, decomposition, and UI review.
+- Use implementation agents for deterministic implementation and migrations.
+- When implementing UI:
+  - follow UI_RULES.md
+  - follow UI_ARCHITECTURE.md
