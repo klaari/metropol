@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
 import { useAuth } from "@clerk/clerk-expo";
-import type { WsJobStatusMessage } from "@aani/types";
+import type { WsServerMessage } from "@aani/types";
 import { backfillLocalCache } from "../lib/localAudio";
+import { useDiscogsMatchStore } from "../store/discogsMatch";
+import { useDiscogsSyncStore } from "../store/discogsSync";
 import { useDownloadsStore } from "../store/downloads";
 import { useLibraryStore } from "../store/library";
 
@@ -10,7 +12,8 @@ const RECONNECT_DELAY = 3000;
 
 export function useDownloadWs() {
   const { getToken, userId } = useAuth();
-  const handleWsMessage = useDownloadsStore((s) => s.handleWsMessage);
+  const handleDownloadMessage = useDownloadsStore((s) => s.handleWsMessage);
+  const handleDiscogsSyncMessage = useDiscogsSyncStore((s) => s.handleWsMessage);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -30,10 +33,12 @@ export function useDownloadWs() {
 
       ws.onmessage = (event) => {
         try {
-          const msg: WsJobStatusMessage = JSON.parse(event.data);
+          const msg: WsServerMessage = JSON.parse(event.data);
           if (msg.type === "job:status") {
-            handleWsMessage(msg);
+            handleDownloadMessage(msg);
             if (msg.status === "completed" && msg.trackId && userId) {
+              const trackId = msg.trackId;
+              const trackTitle = msg.title ?? "Downloaded track";
               useLibraryStore.getState().fetchTracks(userId);
               backfillLocalCache(userId).catch((e) =>
                 console.warn(
@@ -41,7 +46,22 @@ export function useDownloadWs() {
                   e?.message ?? e,
                 ),
               );
+              (async () => {
+                const token = await getToken();
+                if (!token) return;
+                useDiscogsMatchStore
+                  .getState()
+                  .triggerAutoMatch({ trackId, trackTitle }, token)
+                  .catch((e) =>
+                    console.warn(
+                      "[discogs] auto-match:",
+                      e?.message ?? e,
+                    ),
+                  );
+              })();
             }
+          } else if (msg.type === "discogs:sync") {
+            handleDiscogsSyncMessage(msg);
           }
         } catch {
           // Ignore malformed messages
@@ -65,5 +85,5 @@ export function useDownloadWs() {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  }, [getToken, handleWsMessage, userId]);
+  }, [getToken, handleDownloadMessage, handleDiscogsSyncMessage, userId]);
 }

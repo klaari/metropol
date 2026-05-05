@@ -1,6 +1,6 @@
 import type { LibraryTrack } from "@aani/types";
 import { memo } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 function formatDuration(seconds: number | null): string {
   if (seconds == null) return "--:--";
@@ -16,6 +16,12 @@ interface TrackItemProps {
 }
 
 function TrackItem({ track, onPress, onLongPress }: TrackItemProps) {
+  const thumb = track.discogsThumbUrl ?? track.discogsCoverUrl;
+  const dotColor = track.inDiscogsCollection
+    ? "#4cd964"
+    : track.inDiscogsWantlist
+      ? "#ff4d6d"
+      : null;
   return (
     <Pressable
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
@@ -23,8 +29,17 @@ function TrackItem({ track, onPress, onLongPress }: TrackItemProps) {
       onLongPress={onLongPress}
       android_ripple={{ color: "rgba(255,255,255,0.08)" }}
     >
-      <View style={styles.artwork}>
-        <Text style={styles.artworkIcon}>♫</Text>
+      <View style={styles.artworkWrap}>
+        <View style={styles.artwork}>
+          {thumb ? (
+            <Image source={{ uri: thumb }} style={styles.artworkImage} />
+          ) : (
+            <Text style={styles.artworkIcon}>♫</Text>
+          )}
+        </View>
+        {dotColor ? (
+          <View style={[styles.dot, { backgroundColor: dotColor }]} />
+        ) : null}
       </View>
       <View style={styles.info}>
         <Text style={styles.title} numberOfLines={1}>
@@ -53,17 +68,36 @@ const styles = StyleSheet.create({
   pressed: {
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  artwork: {
+  artworkWrap: {
     width: 48,
     height: 48,
+  },
+  artwork: {
+    width: "100%",
+    height: "100%",
     borderRadius: 8,
     backgroundColor: "#1a1a1a",
     justifyContent: "center",
     alignItems: "center",
+    overflow: "hidden",
+  },
+  artworkImage: {
+    width: "100%",
+    height: "100%",
   },
   artworkIcon: {
     fontSize: 20,
     color: "#555",
+  },
+  dot: {
+    position: "absolute",
+    bottom: -2,
+    right: -2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: "#000",
   },
   info: {
     flex: 1,

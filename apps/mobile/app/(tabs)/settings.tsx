@@ -13,6 +13,7 @@ import * as FileSystem from "expo-file-system";
 import * as Updates from "expo-updates";
 import { useAuth } from "@clerk/clerk-expo";
 import { backfillLocalCache, clearLocalCache, getCacheSizeBytes } from "../../lib/localAudio";
+import { useDiscogsSyncStore } from "../../store/discogsSync";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -28,6 +29,13 @@ export default function SettingsScreen() {
   const [cacheBytes, setCacheBytes] = useState(0);
   const [clearing, setClearing] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [syncStarting, setSyncStarting] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const discogsCounts = useDiscogsSyncStore((s) => s.counts);
+  const discogsCountsLoading = useDiscogsSyncStore((s) => s.countsLoading);
+  const discogsStatus = useDiscogsSyncStore((s) => s.status);
+  const fetchDiscogsCounts = useDiscogsSyncStore((s) => s.fetchCounts);
+  const startDiscogsSync = useDiscogsSyncStore((s) => s.startSync);
 
   function refreshCacheSize() {
     setCacheBytes(getCacheSizeBytes());
@@ -106,6 +114,61 @@ export default function SettingsScreen() {
   useEffect(() => {
     checkCookieStatus();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      const token = await getToken();
+      if (token) await fetchDiscogsCounts(token);
+    })();
+  }, [fetchDiscogsCounts, getToken]);
+
+  useEffect(() => {
+    if (discogsStatus.state === "done") {
+      (async () => {
+        const token = await getToken();
+        if (token) await fetchDiscogsCounts(token);
+      })();
+    }
+  }, [discogsStatus, fetchDiscogsCounts, getToken]);
+
+  async function handleDiscogsSync(opts: { incremental?: boolean }) {
+    setSyncStarting(true);
+    setSyncError(null);
+    try {
+      const token = await getToken();
+      if (!token) {
+        setSyncError("Not authenticated");
+        return;
+      }
+      const { error } = await startDiscogsSync(token, opts);
+      if (error) setSyncError(error);
+    } finally {
+      setSyncStarting(false);
+    }
+  }
+
+  function discogsStatusLine(): { text: string; tone: "muted" | "ok" | "error" } | null {
+    switch (discogsStatus.state) {
+      case "idle":
+        return null;
+      case "running": {
+        const phase = discogsStatus.phase === "starting" ? "starting" : discogsStatus.phase;
+        return {
+          text: `Syncing ${phase}: ${discogsStatus.collection} collection / ${discogsStatus.wantlist} wantlist`,
+          tone: "muted",
+        };
+      }
+      case "done": {
+        const seconds = (discogsStatus.durationMs / 1000).toFixed(1);
+        return {
+          text: `Synced ${discogsStatus.collection} + ${discogsStatus.wantlist} in ${seconds}s`,
+          tone: "ok",
+        };
+      }
+      case "error":
+        return { text: discogsStatus.error, tone: "error" };
+    }
+  }
 
   async function checkCookieStatus() {
     if (!API_URL) return;
@@ -263,6 +326,70 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
+      {/* Discogs sync */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Discogs sync</Text>
+        <Text style={styles.description}>
+          Mirror your Discogs collection and wantlist locally so search and
+          auto-match are instant. Full sync rebuilds; quick sync only fetches
+          recent additions.
+        </Text>
+        <View style={styles.statusRow}>
+          <Text style={styles.statusLabel}>Local mirror:</Text>
+          {discogsCountsLoading && !discogsCounts ? (
+            <Text style={styles.statusChecking}>Checking...</Text>
+          ) : discogsCounts ? (
+            <Text style={styles.statusLoaded}>
+              {discogsCounts.collection} collection · {discogsCounts.wantlist} wantlist
+            </Text>
+          ) : (
+            <Text style={styles.statusNotLoaded}>Not synced yet</Text>
+          )}
+        </View>
+        <View style={styles.buttonRow}>
+          <Pressable
+            style={[
+              styles.smallButton,
+              (syncStarting || discogsStatus.state === "running") && styles.buttonDisabled,
+            ]}
+            onPress={() => handleDiscogsSync({ incremental: false })}
+            disabled={syncStarting || discogsStatus.state === "running"}
+          >
+            {syncStarting && discogsStatus.state !== "running" ? (
+              <ActivityIndicator color="#000" size="small" />
+            ) : (
+              <Text style={styles.smallButtonText}>Full sync</Text>
+            )}
+          </Pressable>
+          <Pressable
+            onPress={() => handleDiscogsSync({ incremental: true })}
+            disabled={syncStarting || discogsStatus.state === "running"}
+            hitSlop={6}
+            style={styles.linkBtn}
+          >
+            <Text style={styles.linkBtnText}>Quick sync</Text>
+          </Pressable>
+        </View>
+        {(() => {
+          const line = discogsStatusLine();
+          if (!line) return null;
+          return (
+            <Text
+              style={[
+                styles.statusMsg,
+                line.tone === "error" && styles.statusMsgError,
+                line.tone === "muted" && styles.statusMsgMuted,
+              ]}
+            >
+              {line.text}
+            </Text>
+          );
+        })()}
+        {syncError && (
+          <Text style={[styles.statusMsg, styles.statusMsgError]}>{syncError}</Text>
+        )}
+      </View>
+
       {/* App Updates */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>App version</Text>
@@ -374,6 +501,14 @@ const styles = StyleSheet.create({
   },
   statusMsgError: {
     color: "#ff3b30",
+  },
+  statusMsgMuted: {
+    color: "#888",
+  },
+  buttonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
   },
   versionLine: {
     color: "#888",

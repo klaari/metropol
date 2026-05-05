@@ -6,6 +6,7 @@ import { Slot } from "expo-router";
 import React, { useEffect } from "react";
 import { ActivityIndicator, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import DiscogsMatchBanner from "../components/DiscogsMatchBanner";
 import QueueSheet from "../components/QueueSheet";
 import { backfillLocalCache } from "../lib/localAudio";
 import { attachQueueListeners, registerPlaybackService, setupPlayer } from "../lib/trackPlayer";
@@ -51,6 +52,7 @@ function ClerkGate() {
       {isSignedIn && <AuthenticatedHooks />}
       <Slot />
       {isSignedIn && <QueueSheet />}
+      {isSignedIn && <DiscogsMatchBanner />}
     </>
   );
 }

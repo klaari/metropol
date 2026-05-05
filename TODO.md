@@ -204,12 +204,16 @@ CREATE INDEX ON discogs_user_releases USING gin (search_text gin_trgm_ops);
 2. ✅ `paginateUserList` async generator + `syncDiscogsForUser` (full +
    incremental modes, prunes deleted releases on full sync)
 3. ✅ `POST /discogs/sync` route + `discogs:sync` WS progress messages
-4. Sync button in Settings (manual trigger + progress UI)
+4. ✅ Settings "Discogs sync" section: full + quick sync buttons, live
+   progress from the WS channel, local mirror counts.
 5. ✅ `GET /discogs/local-search` + `GET /discogs/local/counts` —
    trigram-ranked local search. Library UI still TODO.
-6. App-foreground incremental sync
-7. ✅ `POST /discogs/auto-match` endpoint (auto-applies on dominant single hit,
-   otherwise returns candidates). Post-download UI prompt still TODO.
+6. ✅ App-foreground incremental sync (debounced — 5 min min interval),
+   fires on cold start and on app resume.
+7. ✅ `POST /discogs/auto-match` endpoint + post-download banner: auto
+   matches surface "Matched X · Undo"; candidate-only matches surface
+   "N possible matches · Pick" → opens the player so DiscogsSheet can
+   take over.
 
 ---
 
@@ -222,12 +226,13 @@ more reliable with a local index.
 Manual Discogs enrichment is shipped (search → match → enrich +
 collection/wantlist toggles + notes). Remaining:
 
-- Library list shows collection / wantlist badges (JOIN tracks against
-  `discogs_user_releases`)
+- ✅ Library list shows collection / wantlist badges (EXISTS subquery
+  against `discogs_user_releases`) — green dot for collection, red for
+  wantlist; thumbnail used as artwork when present.
 - Library search considers Discogs metadata (label, catalog#, year, genre)
-- Cover art on the player screen when `discogsMetadata.coverUrl` is set
-- Auto-match at ingest — moved into the mirror task (needs the local
-  index to work reliably)
+- ✅ Cover art on the player screen when `discogsMetadata.coverUrl` is set
+- ✅ Auto-match at ingest — covered by the mirror task's post-download
+  banner.
 
 ---
 

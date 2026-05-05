@@ -49,6 +49,11 @@ export interface LibraryTrack extends Track {
   userTrackId: string;
   addedAt: Date;
   originalBpm: number | null;
+  discogsReleaseId?: string | null;
+  discogsCoverUrl?: string | null;
+  discogsThumbUrl?: string | null;
+  inDiscogsCollection?: boolean;
+  inDiscogsWantlist?: boolean;
 }
 
 export interface Playlist {

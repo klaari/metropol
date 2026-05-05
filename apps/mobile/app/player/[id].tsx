@@ -7,6 +7,7 @@ import { and, eq } from "drizzle-orm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Keyboard,
   type LayoutChangeEvent,
   Modal,
@@ -321,6 +322,13 @@ export default function PlayerScreen() {
 
       {/* Track Info */}
       <View style={styles.trackInfo}>
+        {discogsMeta?.coverUrl ? (
+          <Image
+            source={{ uri: discogsMeta.coverUrl }}
+            style={styles.cover}
+            resizeMode="cover"
+          />
+        ) : null}
         <Text style={styles.title}>{currentTrack.title}</Text>
         {currentTrack.artist ? (
           <Text style={styles.artist}>{currentTrack.artist}</Text>
@@ -599,6 +607,13 @@ const styles = StyleSheet.create({
   trackInfo: {
     alignItems: "center",
     marginBottom: 40,
+  },
+  cover: {
+    width: 240,
+    height: 240,
+    borderRadius: 12,
+    backgroundColor: "#1a1a1a",
+    marginBottom: 20,
   },
   title: {
     color: "#fff",

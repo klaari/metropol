@@ -1,6 +1,7 @@
 import { tracks, userTracks } from "@aani/db";
+import type { DiscogsMetadata } from "@aani/db";
 import type { LibraryTrack } from "@aani/types";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import { create } from "zustand";
 import { getDb } from "../lib/db";
 import { deleteObject } from "../lib/r2";
@@ -54,6 +55,18 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
   fetchTracks: async (userId) => {
     set({ isLoading: true, error: null });
     try {
+      const inCollection = sql<boolean>`EXISTS (
+        SELECT 1 FROM discogs_user_releases dur
+        WHERE dur.user_id = ${userId}
+          AND dur.release_id = ${tracks.discogsReleaseId}
+          AND dur.type = 'collection'
+      )`;
+      const inWantlist = sql<boolean>`EXISTS (
+        SELECT 1 FROM discogs_user_releases dur
+        WHERE dur.user_id = ${userId}
+          AND dur.release_id = ${tracks.discogsReleaseId}
+          AND dur.type = 'wantlist'
+      )`;
       const rows = await getDb()
         .select({
           id: tracks.id,
@@ -68,6 +81,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
           format: tracks.format,
           sourceUrl: tracks.sourceUrl,
           downloadedAt: tracks.downloadedAt,
+          discogsReleaseId: tracks.discogsReleaseId,
+          discogsMetadata: tracks.discogsMetadata,
+          inDiscogsCollection: inCollection,
+          inDiscogsWantlist: inWantlist,
           userTrackId: userTracks.id,
           addedAt: userTracks.addedAt,
           originalBpm: userTracks.originalBpm,
@@ -77,7 +94,16 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         .innerJoin(tracks, eq(userTracks.trackId, tracks.id))
         .where(eq(userTracks.userId, userId))
         .orderBy(desc(userTracks.addedAt));
-      set({ tracks: rows as unknown as LibraryTrack[], isLoading: false });
+      const mapped: LibraryTrack[] = rows.map((r) => {
+        const meta = r.discogsMetadata as DiscogsMetadata | null;
+        const { discogsMetadata, ...rest } = r;
+        return {
+          ...(rest as unknown as LibraryTrack),
+          discogsCoverUrl: meta?.coverUrl ?? null,
+          discogsThumbUrl: meta?.thumbUrl ?? null,
+        };
+      });
+      set({ tracks: mapped, isLoading: false });
     } catch (err) {
       set({
         error: err instanceof Error ? err.message : "Failed to load tracks",
