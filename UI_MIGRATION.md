@@ -528,42 +528,42 @@ the §7 lint script returns 0 violations.
   - [x] `design/raw.js` single source of truth
   - [x] `lib/cn.ts` utility
   - [x] `PageSection`, `ContentBlock`, `HeroSection`, `ListSection`, `Cluster`, `Inline` primitives
-- [ ] Phase 0 — Infrastructure
-  - [ ] ESLint rules added (warn level)
-  - [ ] Root surface set to `paper`
-  - [ ] Loading screen migrated
-  - [ ] Smoke screen for primitives
-- [ ] Phase 0.5 — Missing primitives (Input, SettingsRow, Toast, Switch, Field)
-- [ ] Phase 1 — Player + MiniPlayer
-  - [ ] `app/player/[id].tsx` rewritten
-  - [ ] `components/MiniPlayer.tsx` rewritten
-  - [ ] Tempo popover migrated
-- [ ] Phase 2 — Tabs shell
-  - [ ] `app/_layout.tsx`
-  - [ ] `app/(tabs)/_layout.tsx`
-- [ ] Phase 3 — Library + TrackItem
-  - [ ] `components/TrackItem.tsx` → `ListRow`
-  - [ ] `app/(tabs)/library.tsx`
-- [ ] Phase 4 — Playlists
-  - [ ] `app/(tabs)/playlists/index.tsx`
-  - [ ] `app/(tabs)/playlists/[id].tsx`
-- [ ] Phase 5 — Sheets
-  - [ ] `components/QueueSheet.tsx`
-  - [ ] `components/PlaylistPickerSheet.tsx`
-  - [ ] `components/EditTrackModal.tsx`
-- [ ] Phase 6 — Discogs
-  - [ ] `components/DiscogsMatchBanner.tsx`
-  - [ ] `components/DiscogsSheet.tsx` (per step)
-- [ ] Phase 7 — Downloads
-  - [ ] `components/DownloadJobItem.tsx`
-  - [ ] `app/(tabs)/downloads.tsx`
-- [ ] Phase 8 — Settings
-  - [ ] `app/(tabs)/settings.tsx`
-- [ ] Phase 9 — Auth
-  - [ ] `app/(auth)/sign-in.tsx`
-  - [ ] `app/(auth)/sign-up.tsx`
-- [ ] Phase 10 — Cleanup and enforcement
-  - [ ] Lint rules upgraded warn → error
-  - [ ] `scripts/check-design-system.sh` in CI
-  - [ ] `CLAUDE.md` references UI_RULES.md
-  - [ ] All `StyleSheet.create` outside `components/ui/` and `design/` removed or justified
+- [x] Phase 0 — Infrastructure
+  - [x] Design-system guard added (warn level)
+  - [x] Root surface set to `paper`
+  - [x] Loading screen migrated
+  - [x] Smoke screen for primitives
+- [x] Phase 0.5 — Missing primitives (Input, SettingsRow, Toast, Switch, Field)
+- [x] Phase 1 — Player + MiniPlayer
+  - [x] `app/player/[id].tsx` rewritten
+  - [x] `components/MiniPlayer.tsx` rewritten
+  - [x] Tempo popover migrated
+- [x] Phase 2 — Tabs shell
+  - [x] `app/_layout.tsx`
+  - [x] `app/(tabs)/_layout.tsx`
+- [x] Phase 3 — Library + TrackItem
+  - [x] `components/TrackItem.tsx` → `ListRow`
+  - [x] `app/(tabs)/library.tsx`
+- [x] Phase 4 — Playlists
+  - [x] `app/(tabs)/playlists/index.tsx`
+  - [x] `app/(tabs)/playlists/[id].tsx`
+- [x] Phase 5 — Sheets
+  - [x] `components/QueueSheet.tsx`
+  - [x] `components/PlaylistPickerSheet.tsx`
+  - [x] `components/EditTrackModal.tsx`
+- [x] Phase 6 — Discogs
+  - [x] `components/DiscogsMatchBanner.tsx`
+  - [x] `components/DiscogsSheet.tsx` (per step)
+- [x] Phase 7 — Downloads
+  - [x] `components/DownloadJobItem.tsx`
+  - [x] `app/(tabs)/downloads.tsx`
+- [x] Phase 8 — Settings
+  - [x] `app/(tabs)/settings.tsx`
+- [x] Phase 9 — Auth
+  - [x] `app/(auth)/sign-in.tsx`
+  - [x] `app/(auth)/sign-up.tsx`
+- [x] Phase 10 — Cleanup and enforcement
+  - [x] Lint rules upgraded warn → error
+  - [x] `scripts/check-design-system.sh` in CI
+  - [x] `CLAUDE.md` references UI_RULES.md
+  - [x] All `StyleSheet.create` outside `components/ui/` and `design/` removed or justified
