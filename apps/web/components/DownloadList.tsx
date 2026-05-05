@@ -62,7 +62,9 @@ export default function DownloadList({ jobs, setJobs }: Props) {
       const token = await getToken();
       if (!token || !mountedRef.current) return;
 
-      const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(token)}`);
+      const base = WS_URL.replace(/\/+$/, "");
+      const url = base.endsWith("/ws") ? base : `${base}/ws`;
+      const ws = new WebSocket(`${url}?token=${encodeURIComponent(token)}`);
       wsRef.current = ws;
 
       ws.onmessage = (event) => {

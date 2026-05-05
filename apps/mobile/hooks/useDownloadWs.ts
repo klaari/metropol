@@ -19,6 +19,8 @@ export function useDownloadWs() {
 
   useEffect(() => {
     if (!WS_URL) return;
+    const base = WS_URL.replace(/\/+$/, "");
+    const wsUrl = base.endsWith("/ws") ? base : `${base}/ws`;
 
     let unmounted = false;
 
@@ -28,7 +30,7 @@ export function useDownloadWs() {
       const token = await getToken();
       if (!token || unmounted) return;
 
-      const ws = new WebSocket(`${WS_URL}?token=${token}`);
+      const ws = new WebSocket(`${wsUrl}?token=${token}`);
       wsRef.current = ws;
 
       ws.onmessage = (event) => {
