@@ -1,7 +1,7 @@
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import type { DiscogsMetadata } from "@aani/db";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -64,6 +64,8 @@ export default function DiscogsSheet({
   onEnrichmentChange,
 }: Props) {
   const { getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const [enrichment, setEnrichment] = useState<TrackEnrichment | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -110,7 +112,7 @@ export default function DiscogsSheet({
 
   const refresh = useCallback(async () => {
     if (!trackId) return;
-    const token = await getToken();
+    const token = await getTokenRef.current();
     if (!token) return;
     setLoading(true);
     setLoadError(null);
@@ -129,7 +131,7 @@ export default function DiscogsSheet({
     } finally {
       setLoading(false);
     }
-  }, [getToken, trackId, propagate]);
+  }, [trackId, propagate]);
 
   useEffect(() => {
     if (visible && trackId) {
@@ -144,7 +146,7 @@ export default function DiscogsSheet({
   async function runSearch() {
     const q = query.trim();
     if (!q) return;
-    const token = await getToken();
+    const token = await getTokenRef.current();
     if (!token) return;
     setSearching(true);
     try {
@@ -164,7 +166,7 @@ export default function DiscogsSheet({
 
   async function pickMatch(result: SearchResult) {
     if (!trackId) return;
-    const token = await getToken();
+    const token = await getTokenRef.current();
     if (!token) return;
     setPendingReleaseId(String(result.id));
     try {
@@ -190,7 +192,7 @@ export default function DiscogsSheet({
 
   async function toggleCollection() {
     if (!enrichment?.metadata || !trackId) return;
-    const token = await getToken();
+    const token = await getTokenRef.current();
     if (!token) return;
     const releaseId = enrichment.metadata.releaseId;
     setTogglingCollection(true);
@@ -219,7 +221,7 @@ export default function DiscogsSheet({
 
   async function toggleWantlist() {
     if (!enrichment?.metadata || !trackId) return;
-    const token = await getToken();
+    const token = await getTokenRef.current();
     if (!token) return;
     const releaseId = enrichment.metadata.releaseId;
     setTogglingWantlist(true);
@@ -251,7 +253,7 @@ export default function DiscogsSheet({
 
   async function saveWantlistNote() {
     if (!enrichment?.metadata) return;
-    const token = await getToken();
+    const token = await getTokenRef.current();
     if (!token) return;
     const releaseId = enrichment.metadata.releaseId;
     setSavingWantlistNote(true);
@@ -276,7 +278,7 @@ export default function DiscogsSheet({
 
   async function removeEnrichment() {
     if (!trackId) return;
-    const token = await getToken();
+    const token = await getTokenRef.current();
     if (!token) return;
     const { error } = await apiFetch(
       `/discogs/track/${trackId}/enrichment`,

@@ -12,6 +12,8 @@ const RECONNECT_DELAY = 3000;
 
 export function useDownloadWs() {
   const { getToken, userId } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const handleDownloadMessage = useDownloadsStore((s) => s.handleWsMessage);
   const handleDiscogsSyncMessage = useDiscogsSyncStore((s) => s.handleWsMessage);
   const wsRef = useRef<WebSocket | null>(null);
@@ -27,7 +29,7 @@ export function useDownloadWs() {
     async function connect() {
       if (unmounted) return;
 
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token || unmounted) return;
 
       const ws = new WebSocket(`${wsUrl}?token=${token}`);
@@ -49,7 +51,7 @@ export function useDownloadWs() {
                 ),
               );
               (async () => {
-                const token = await getToken();
+                const token = await getTokenRef.current();
                 if (!token) return;
                 useDiscogsMatchStore
                   .getState()
@@ -87,5 +89,5 @@ export function useDownloadWs() {
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       wsRef.current?.close();
     };
-  }, [getToken, handleDownloadMessage, handleDiscogsSyncMessage, userId]);
+  }, [handleDownloadMessage, handleDiscogsSyncMessage, userId]);
 }

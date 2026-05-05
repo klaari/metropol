@@ -7,6 +7,8 @@ import { useDownloadsStore } from "../store/downloads";
 
 export function useAppResumeFetch() {
   const { userId, getToken } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const fetchTracks = useLibraryStore((s) => s.fetchTracks);
   const fetchJobs = useDownloadsStore((s) => s.fetchJobs);
   const maybeIncrementalSync = useDiscogsSyncStore((s) => s.maybeIncrementalSync);
@@ -16,7 +18,7 @@ export function useAppResumeFetch() {
     async function refresh() {
       if (!userId) return;
       fetchTracks(userId);
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (!token) return;
       fetchJobs(token);
       maybeIncrementalSync(token).catch((e) =>
@@ -38,5 +40,5 @@ export function useAppResumeFetch() {
     });
 
     return () => sub.remove();
-  }, [userId, getToken, fetchTracks, fetchJobs, maybeIncrementalSync]);
+  }, [userId, fetchTracks, fetchJobs, maybeIncrementalSync]);
 }

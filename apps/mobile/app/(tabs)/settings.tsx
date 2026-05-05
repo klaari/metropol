@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -43,6 +43,8 @@ function describeDiscogsStatus(status: DiscogsSyncStatus): StatusInfo | null {
 
 export default function SettingsScreen() {
   const { getToken, signOut, userId } = useAuth();
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   const [cookieStatus, setCookieStatus] = useState<boolean | null>(null);
   const [uploading, setUploading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -141,18 +143,18 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     (async () => {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (token) await fetchDiscogsCounts(token);
     })();
-  }, [fetchDiscogsCounts, getToken]);
+  }, [fetchDiscogsCounts]);
 
   useEffect(() => {
     if (discogsStatus.state !== "done") return;
     (async () => {
-      const token = await getToken();
+      const token = await getTokenRef.current();
       if (token) await fetchDiscogsCounts(token);
     })();
-  }, [discogsStatus.state, fetchDiscogsCounts, getToken]);
+  }, [discogsStatus.state, fetchDiscogsCounts]);
 
   async function handleDiscogsSync(opts: { incremental?: boolean }) {
     setSyncStarting(true);
