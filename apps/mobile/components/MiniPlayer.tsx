@@ -1,10 +1,21 @@
 import { useAuth } from "@clerk/clerk-expo";
-import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Modal, View } from "react-native";
 import { useCurrentTrack } from "../hooks/useCurrentTrack";
 import { usePlayerStore } from "../store/player";
+import {
+  HStack,
+  IconButton,
+  Pressable,
+  ProgressBar,
+  Surface,
+  Text,
+  VStack,
+  palette,
+  radius,
+  space,
+} from "./ui";
 
 const TEMPO_AUTO_CLOSE_MS = 3500;
 
@@ -66,65 +77,86 @@ export default function MiniPlayer() {
       : ratePercent > 0
         ? `+${ratePercent.toFixed(1)}%`
         : `${ratePercent.toFixed(1)}%`;
+  const isAlteredRate = playbackRate !== 1 && originalBpm != null;
 
   return (
-    <View style={styles.wrapper}>
-      <View style={styles.progressTrack}>
-        <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
-      </View>
+    <Surface tone="raised" rounded="none" pad="none" bordered>
+      <ProgressBar value={progress} />
       <Pressable
-        style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+        flat
         onPress={() => router.push(`/player/${currentTrack.id}`)}
-        android_ripple={{ color: "rgba(255,255,255,0.08)" }}
+        android_ripple={{ color: palette.paperSunken }}
       >
-        <View style={styles.artwork}>
-          <Text style={styles.artworkIcon}>♫</Text>
-        </View>
-        <View style={styles.info}>
-          <Text style={styles.title} numberOfLines={1}>
-            {currentTrack.title}
-          </Text>
-          {currentTrack.artist ? (
-            <Text style={styles.artist} numberOfLines={1}>
-              {currentTrack.artist}
+        <HStack gap="md" padX="md" padY="sm">
+          <Surface tone="sunken" rounded="md" pad="none">
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text variant="title" tone="faint">
+                ♫
+              </Text>
+            </View>
+          </Surface>
+          <VStack gap="xs" flex>
+            <Text variant="bodyStrong" numberOfLines={1}>
+              {currentTrack.title}
             </Text>
-          ) : null}
-        </View>
-        <Pressable
-          onPress={resetRate}
-          onLongPress={() => setTempoOpen(true)}
-          delayLongPress={250}
-          hitSlop={6}
-          style={styles.bpmBadge}
-          android_ripple={{ color: "rgba(255,255,255,0.08)", borderless: true }}
-        >
-          <Text style={styles.bpmValue}>
-            {currentBpm != null ? currentBpm.toFixed(1) : "—"}
-          </Text>
-          {playbackRate !== 1 && originalBpm != null ? (
-            <Text style={[styles.bpmLabel, styles.bpmLabelAltered]}>
-              {originalBpm}
+            {currentTrack.artist ? (
+              <Text variant="caption" tone="muted" numberOfLines={1}>
+                {currentTrack.artist}
+              </Text>
+            ) : null}
+          </VStack>
+          <Pressable
+            flat
+            onPress={resetRate}
+            onLongPress={() => setTempoOpen(true)}
+            delayLongPress={250}
+            hitSlop={space.sm}
+            android_ripple={{ color: palette.paperSunken, borderless: true }}
+            style={{
+              alignItems: "center",
+              justifyContent: "center",
+              minWidth: 52,
+              paddingHorizontal: space.sm,
+              paddingVertical: space.xs,
+              borderRadius: radius.md,
+              backgroundColor: isAlteredRate
+                ? palette.cobalt
+                : palette.transparent,
+            }}
+          >
+            <Text
+              variant="numeric"
+              tone={isAlteredRate ? "inverse" : "primary"}
+              numeric
+            >
+              {currentBpm != null ? currentBpm.toFixed(1) : "—"}
             </Text>
-          ) : (
-            <Text style={styles.bpmLabel}>BPM</Text>
-          )}
-        </Pressable>
-        <Pressable
-          onPress={togglePlayPause}
-          hitSlop={12}
-          style={styles.playBtn}
-          android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: true }}
-        >
-          <Ionicons name={playing ? "pause" : "play"} size={22} color="#fff" />
-        </Pressable>
-        <Pressable
-          onPress={() => usePlayerStore.getState().setQueueSheetVisible(true)}
-          hitSlop={12}
-          style={styles.queueBtn}
-          android_ripple={{ color: "rgba(255,255,255,0.15)", borderless: true }}
-        >
-          <Ionicons name="list" size={22} color="#fff" />
-        </Pressable>
+            <Text
+              variant="eyebrow"
+              tone={isAlteredRate ? "inverse" : "muted"}
+              numeric={isAlteredRate}
+            >
+              {isAlteredRate ? originalBpm : "BPM"}
+            </Text>
+          </Pressable>
+          <IconButton
+            icon={playing ? "pause" : "play"}
+            accessibilityLabel={playing ? "Pause" : "Play"}
+            onPress={togglePlayPause}
+          />
+          <IconButton
+            icon="list"
+            accessibilityLabel="Open queue"
+            onPress={() => usePlayerStore.getState().setQueueSheetVisible(true)}
+          />
+        </HStack>
       </Pressable>
 
       <Modal
@@ -134,170 +166,65 @@ export default function MiniPlayer() {
         onRequestClose={() => setTempoOpen(false)}
       >
         <Pressable
-          style={styles.tempoBackdrop}
+          flat
+          style={{ flex: 1, backgroundColor: "rgba(22,19,14,0.45)" }}
           onPress={() => setTempoOpen(false)}
         />
-        <View style={styles.tempoPopover}>
-          <Pressable
-            style={styles.tempoBtn}
-            onPress={() => adjustRate(-0.005)}
-            hitSlop={6}
-          >
-            <Text style={styles.tempoBtnText}>−0.5%</Text>
-          </Pressable>
-          <View style={styles.tempoCenter}>
-            <Text style={styles.tempoRate}>{rateDisplay}</Text>
-            {currentBpm != null ? (
-              <Text style={styles.tempoBpm}>{currentBpm.toFixed(1)} BPM</Text>
-            ) : null}
-          </View>
-          <Pressable
-            style={styles.tempoBtn}
-            onPress={() => adjustRate(0.005)}
-            hitSlop={6}
-          >
-            <Text style={styles.tempoBtnText}>+0.5%</Text>
-          </Pressable>
-        </View>
+        <Surface
+          tone="raised"
+          lift="popover"
+          rounded="lg"
+          pad="md"
+          bordered
+          style={{
+            position: "absolute",
+            left: space.base,
+            right: space.base,
+            bottom: 110,
+          }}
+        >
+          <HStack gap="md" justify="between">
+            <Pressable
+              onPress={() => adjustRate(-0.005)}
+              hitSlop={space.sm}
+              style={{
+                minWidth: 64,
+                alignItems: "center",
+                paddingVertical: space.sm,
+                paddingHorizontal: space.md,
+                borderRadius: radius.md,
+                backgroundColor: palette.paperSunken,
+              }}
+            >
+              <Text variant="bodyStrong">-0.5%</Text>
+            </Pressable>
+            <VStack gap="xs" align="center" flex>
+              <Text variant="title" numeric>
+                {rateDisplay}
+              </Text>
+              {currentBpm != null ? (
+                <Text variant="numeric" tone="muted">
+                  {currentBpm.toFixed(1)} BPM
+                </Text>
+              ) : null}
+            </VStack>
+            <Pressable
+              onPress={() => adjustRate(0.005)}
+              hitSlop={space.sm}
+              style={{
+                minWidth: 64,
+                alignItems: "center",
+                paddingVertical: space.sm,
+                paddingHorizontal: space.md,
+                borderRadius: radius.md,
+                backgroundColor: palette.paperSunken,
+              }}
+            >
+              <Text variant="bodyStrong">+0.5%</Text>
+            </Pressable>
+          </HStack>
+        </Surface>
       </Modal>
-    </View>
+    </Surface>
   );
 }
-
-const styles = StyleSheet.create({
-  wrapper: {
-    backgroundColor: "#0a0a0a",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: "#222",
-  },
-  progressTrack: {
-    height: 2,
-    backgroundColor: "#1a1a1a",
-  },
-  progressFill: {
-    height: "100%",
-    backgroundColor: "#fff",
-  },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    gap: 12,
-  },
-  pressed: {
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-  artwork: {
-    width: 40,
-    height: 40,
-    borderRadius: 6,
-    backgroundColor: "#1a1a1a",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  artworkIcon: {
-    fontSize: 18,
-    color: "#555",
-  },
-  info: {
-    flex: 1,
-    gap: 2,
-  },
-  title: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  artist: {
-    color: "#888",
-    fontSize: 12,
-  },
-  playBtn: {
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  queueBtn: {
-    width: 36,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  bpmBadge: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    minWidth: 52,
-    borderRadius: 6,
-  },
-  bpmValue: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-    fontVariant: ["tabular-nums"],
-  },
-  bpmLabel: {
-    color: "#666",
-    fontSize: 9,
-    fontWeight: "600",
-    letterSpacing: 0.6,
-    marginTop: -1,
-  },
-  bpmLabelAltered: {
-    color: "#f5a623",
-    fontSize: 11,
-    fontVariant: ["tabular-nums"],
-    letterSpacing: 0,
-  },
-  tempoBackdrop: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
-  },
-  tempoPopover: {
-    position: "absolute",
-    left: 16,
-    right: 16,
-    bottom: 110,
-    backgroundColor: "#161616",
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "#2a2a2a",
-  },
-  tempoBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: "#222",
-    borderRadius: 8,
-    minWidth: 60,
-    alignItems: "center",
-  },
-  tempoBtnText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  tempoCenter: {
-    flex: 1,
-    alignItems: "center",
-  },
-  tempoRate: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-    fontVariant: ["tabular-nums"],
-  },
-  tempoBpm: {
-    color: "#888",
-    fontSize: 11,
-    marginTop: 2,
-    fontVariant: ["tabular-nums"],
-  },
-});

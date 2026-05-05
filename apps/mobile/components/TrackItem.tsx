@@ -1,6 +1,14 @@
 import type { LibraryTrack } from "@aani/types";
 import { memo } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, View } from "react-native";
+import {
+  ListRow,
+  Surface,
+  Text,
+  palette,
+  radius,
+  space,
+} from "./ui";
 
 function formatDuration(seconds: number | null): string {
   if (seconds == null) return "--:--";
@@ -15,100 +23,74 @@ interface TrackItemProps {
   onLongPress: () => void;
 }
 
-function TrackItem({ track, onPress, onLongPress }: TrackItemProps) {
+function TrackArtwork({ track }: { track: LibraryTrack }) {
   const thumb = track.discogsThumbUrl ?? track.discogsCoverUrl;
   const dotColor = track.inDiscogsCollection
-    ? "#4cd964"
+    ? palette.positive
     : track.inDiscogsWantlist
-      ? "#ff4d6d"
+      ? palette.critical
       : null;
+
   return (
-    <Pressable
-      style={({ pressed }) => [styles.container, pressed && styles.pressed]}
+    <View>
+      <Surface tone="sunken" rounded="md" pad="none">
+        <View
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: radius.md,
+            overflow: "hidden",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {thumb ? (
+            <Image source={{ uri: thumb }} style={{ width: "100%", height: "100%" }} />
+          ) : (
+            <Text variant="title" tone="faint">
+              ♫
+            </Text>
+          )}
+        </View>
+      </Surface>
+      {dotColor ? (
+        <View
+          style={{
+            position: "absolute",
+            bottom: -space.xs / 2,
+            right: -space.xs / 2,
+            width: space.md,
+            height: space.md,
+            borderRadius: radius.full,
+            borderWidth: space.xs / 2,
+            borderColor: palette.paper,
+            backgroundColor: dotColor,
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function TrackItem({ track, onPress, onLongPress }: TrackItemProps) {
+  const subtitle = `${track.artist || "Unknown artist"}${
+    track.originalBpm != null ? ` · ${track.originalBpm} BPM` : ""
+  }`;
+
+  return (
+    <ListRow
+      title={track.title}
+      subtitle={subtitle}
+      leading={<TrackArtwork track={track} />}
+      trailing={
+        <Text variant="numeric" tone="muted">
+          {formatDuration(track.duration)}
+        </Text>
+      }
       onPress={onPress}
       onLongPress={onLongPress}
-      android_ripple={{ color: "rgba(255,255,255,0.08)" }}
-    >
-      <View style={styles.artwork}>
-        {thumb ? (
-          <Image source={{ uri: thumb }} style={styles.artworkImage} />
-        ) : (
-          <Text style={styles.artworkIcon}>♫</Text>
-        )}
-        {dotColor ? (
-          <View style={[styles.dot, { backgroundColor: dotColor }]} />
-        ) : null}
-      </View>
-      <View style={styles.info}>
-        <Text style={styles.title} numberOfLines={1}>
-          {track.title}
-        </Text>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          {track.artist || "Unknown artist"}
-          {track.originalBpm != null ? `  ·  ${track.originalBpm} BPM` : ""}
-        </Text>
-      </View>
-      <Text style={styles.duration}>{formatDuration(track.duration)}</Text>
-    </Pressable>
+    />
   );
 }
 
 export default memo(TrackItem);
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    gap: 14,
-  },
-  pressed: {
-    backgroundColor: "rgba(255,255,255,0.05)",
-  },
-  artwork: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
-    backgroundColor: "#1a1a1a",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  artworkImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 8,
-  },
-  artworkIcon: {
-    fontSize: 20,
-    color: "#555",
-  },
-  dot: {
-    position: "absolute",
-    bottom: -2,
-    right: -2,
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: "#000",
-  },
-  info: {
-    flex: 1,
-    gap: 3,
-  },
-  title: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  subtitle: {
-    color: "#777",
-    fontSize: 13,
-  },
-  duration: {
-    color: "#555",
-    fontSize: 12,
-    fontVariant: ["tabular-nums"],
-  },
-});
