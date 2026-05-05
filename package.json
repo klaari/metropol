@@ -10,6 +10,9 @@
     "db:push": "turbo run db:push"
   },
   "devDependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "react-native-reanimated": "~3.19.5",
     "turbo": "^2.8.10",
     "typescript": "5.9.2"
   },
