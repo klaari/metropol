@@ -204,6 +204,17 @@ export default function PlayerScreen() {
     if (wasPlaying && userId) savePosition(userId);
   }
 
+  const handleDiscogsClose = useCallback(() => setDiscogsOpen(false), []);
+
+  const handleDiscogsEnrichmentChange = useCallback(
+    (d: { metadata: DiscogsMetadata | null; inCollection: boolean; inWantlist: boolean }) => {
+      setDiscogsMeta(d.metadata);
+      setDiscogsInCollection(d.inCollection);
+      setDiscogsInWantlist(d.inWantlist);
+    },
+    [],
+  );
+
   function startBpmEdit() {
     setBpmInput(originalBpm != null ? String(originalBpm) : "");
     setEditingBpm(true);
@@ -548,12 +559,8 @@ export default function PlayerScreen() {
         visible={discogsOpen}
         trackId={currentTrack.id}
         defaultQuery={`${currentTrack.artist ?? ""} ${currentTrack.title}`.trim()}
-        onClose={() => setDiscogsOpen(false)}
-        onEnrichmentChange={(d) => {
-          setDiscogsMeta(d.metadata);
-          setDiscogsInCollection(d.inCollection);
-          setDiscogsInWantlist(d.inWantlist);
-        }}
+        onClose={handleDiscogsClose}
+        onEnrichmentChange={handleDiscogsEnrichmentChange}
       />
     </View>
   );

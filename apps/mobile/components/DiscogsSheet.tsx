@@ -66,6 +66,7 @@ export default function DiscogsSheet({
   const { getToken } = useAuth();
   const [enrichment, setEnrichment] = useState<TrackEnrichment | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchMode, setSearchMode] = useState(false);
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -90,6 +91,7 @@ export default function DiscogsSheet({
 
   const close = useCallback(() => {
     setEnrichment(null);
+    setLoadError(null);
     setSearchMode(false);
     setResults([]);
     setQuery("");
@@ -111,13 +113,15 @@ export default function DiscogsSheet({
     const token = await getToken();
     if (!token) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const { data, error } = await apiFetch<TrackEnrichment>(
         `/discogs/track/${trackId}`,
         token,
       );
       if (error) {
-        Alert.alert("Discogs error", error);
+        setLoadError(error);
+        setSearchMode(true);
       } else if (data) {
         propagate(data);
         setSearchMode(!data.metadata);
@@ -132,7 +136,10 @@ export default function DiscogsSheet({
       setQuery(defaultQuery.trim());
       refresh();
     }
-  }, [visible, trackId, defaultQuery, refresh]);
+    // Intentionally narrow deps: parent re-renders constantly during playback
+    // and would otherwise spam refresh() (and stack Alerts) every second.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, trackId]);
 
   async function runSearch() {
     const q = query.trim();
@@ -307,6 +314,18 @@ export default function DiscogsSheet({
         {loading ? (
           <View style={styles.center}>
             <ActivityIndicator color="#fff" />
+          </View>
+        ) : loadError ? (
+          <View style={styles.center}>
+            <Text style={styles.errorTitle}>Couldn't load Discogs data</Text>
+            <Text style={styles.errorBody}>{loadError}</Text>
+            <Pressable
+              style={styles.retryBtn}
+              onPress={refresh}
+              hitSlop={6}
+            >
+              <Text style={styles.retryBtnText}>Retry</Text>
+            </Pressable>
           </View>
         ) : !searchMode && metadata ? (
           <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -652,6 +671,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: 40,
+    paddingHorizontal: 16,
+    gap: 8,
+  },
+  errorTitle: {
+    color: "#fff",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  errorBody: {
+    color: "#aaa",
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  retryBtn: {
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: "#222",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#333",
+  },
+  retryBtnText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "600",
   },
   scrollContent: {
     paddingBottom: 32,
