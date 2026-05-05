@@ -64,6 +64,58 @@ boundaries, transition effects.
 
 ---
 
+## 🔮 Later: DJ-style mixing (crossfade + 3-band EQ)
+
+**Priority:** Undecided — not committed yet, captured for research.
+**Description:**
+Two-deck mixing inside Aani: play two tracks simultaneously with a
+crossfader between them and a per-deck 3-band EQ (low / mid / high), the
+way a DJ mixer works.
+
+**Open question — is this in scope?**
+This shifts Aani from "music player with rate control" toward a DJ tool.
+Decide before committing:
+- How often would mixing actually be used vs. plain playback?
+- Mixer UI is a separate screen, not a tweak to the existing player.
+- Background playback / lock-screen controls don't map cleanly onto a
+  two-deck mixer — the mixer is a foreground-only feature.
+
+**Technical notes:**
+- RNTP is single-track + queue. It cannot host two simultaneous sources
+  with independent gain and filter chains, so the mixer needs a different
+  audio engine. Crossfade is not a built-in RNTP feature either.
+- `react-native-audio-api` (Software Mansion) is the natural fit — Web
+  Audio API for RN. Mapping:
+  - Crossfade → two `GainNode`s with linear/equal-power ramps
+  - 3-band EQ per deck → `BiquadFilterNode` chain: low-shelf (≈ 80 Hz) →
+    peaking (≈ 1 kHz) → high-shelf (≈ 10 kHz), each ±12 dB or so
+  - Tempo/pitch already lives in our store; rate adjustment per deck
+    stays the same model (`currentBpm = originalBpm * playbackRate`)
+- Likely architecture: keep RNTP as the default playback engine (lock
+  screen, notifications, queue) and instantiate `react-native-audio-api`
+  only on the mixer screen. Two engines coexisting means careful audio
+  session handling — only one of them owns output at a time.
+- Alternative: migrate the whole player to `react-native-audio-api` and
+  rebuild lock-screen / notification plumbing ourselves. Bigger lift, but
+  one engine.
+- Beatmatch / auto-cue depend on the **Downbeat detection** task above.
+
+**Source for the engine choice:**
+- RNTP issue #2629 (2026-04, "RNTP Alternatives") — alternatives surveyed
+  by the community: `react-native-audio-api`, `react-native-nitro-player`,
+  `expo-audio` (SDK 55+), `react-native-audio-browser`. Audio-api is the
+  only one of these built around the multi-source / filter-graph model
+  that mixing requires.
+
+**If we commit, suggested phasing:**
+1. Spike: load two tracks in `react-native-audio-api`, wire a single
+   crossfade gain ramp, confirm the engine can coexist with RNTP.
+2. Mixer screen UI: two deck strips + crossfader + three EQ knobs each.
+3. Per-deck rate control reusing the existing rate model.
+4. Beatmatch / auto-cue (depends on downbeat detection landing).
+
+---
+
 ## 🔜 Task: Discogs mirror (local sync of collection + wantlist)
 
 **Priority:** High
