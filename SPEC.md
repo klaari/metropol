@@ -2,9 +2,10 @@
 
 ## Vision
 
-Aani on henkilökohtainen mobiilimusiikkisoitin DJ-käyttöön. Ydinidea:
-selaat Discogsia, löydät biisin, lataat sen — kaikki yhdessä sovelluksessa. Kirjasto
-synkronoituu pilveen ja soitin tukee tempo/pitch-säätöä live-BPM-näytöllä settisuunnittelua varten.
+Aani is a personal mobile music player for DJ use. The core idea: you
+browse Discogs, find a track, download it — all in one app. The library
+syncs to the cloud and the player has tempo / pitch control with a live
+BPM display for set planning.
 
 ---
 
@@ -18,6 +19,7 @@ synkronoituu pilveen ja soitin tukee tempo/pitch-säätöä live-BPM-näytöllä
 - **Storage:** Cloudflare R2
 - **API:** Bun + Hono (Railway)
 - **Downloader:** yt-dlp
+- **Web:** Next.js (App Router) — companion app on Vercel
 - **Monorepo:** Turborepo
 - **Language:** TypeScript everywhere, strict mode
 
@@ -25,254 +27,258 @@ synkronoituu pilveen ja soitin tukee tempo/pitch-säätöä live-BPM-näytöllä
 
 ## Screens & Routes
 
+### Mobile (Expo Router)
+
 | Route | Screen | Auth |
 |---|---|---|
 | `/sign-in` | Sign In | No |
 | `/sign-up` | Sign Up | No |
 | `/(tabs)/library` | Track Library | Yes |
 | `/(tabs)/playlists` | Playlists | Yes |
-| `/(tabs)/playlists/[id]` | Playlist Detail | Yes |
+| `/(tabs)/playlists/[id]` | Playlist detail | Yes |
 | `/(tabs)/downloads` | Downloads | Yes |
-| `/(tabs)/discogs` | Discogs Browser | Yes (Phase 3) |
-| `/player/[id]` | Player | Yes |
+| `/(tabs)/settings` | Settings | Yes |
+| `/player/[id]` | Player (with Discogs sheet) | Yes |
+
+### Web (Next.js)
+
+| Route | Page | Auth |
+|---|---|---|
+| `/sign-in`, `/sign-up` | Auth | No |
+| `/library` | Track Library | Yes |
+| `/playlists`, `/playlists/[id]` | Playlists | Yes |
+| `/downloads` | Downloads | Yes |
+| `/settings` | Settings | Yes |
 
 ---
 
 ## Phase 1 — Core Player ✅
 
-Perussoitin toimii. Sisältää:
-
-- Clerk-autentikointi
-- Kirjasto (tiedostoimportti laitteelta)
-- Soitin: transport controls, seek, playback rate, BPM-näyttö
-- Playlists + järjestely
+- Clerk auth
+- Library (file import from device)
+- Player: transport controls, seek, playback rate, BPM display
+- Playlists + reordering
 - Neon + Drizzle, Cloudflare R2
 
 ---
 
-## Phase 2 — YouTube-lataus (rakennettu, viimeistellään)
+## Phase 2 — YouTube downloads ✅
 
-### Toteutettu
-- Bun + Hono API (Railway)
-- yt-dlp lataa audion, uploadaa R2:een
-- BullMQ-jono työnkäsittelyyn
-- WebSocket-yhteys: reaaliaikainen tilan päivitys mobiiliin
-- Downloads-välilehti: URL-syöttö, jono-lista, tilabadet
-
-### Tehtävä: "+ nappi" pikalisäys
-
-**Kuvaus:**
-Korvaa Downloads-välilehden tekstikenttäpohjainen URL-syöttö + napilla,
-joka tarkistaa leikepöydän vain kun käyttäjä itse painaa sitä.
-
-**Työnkulku:**
-1. Käyttäjä kopioi YouTube-urlin (esim. Discogsin kautta selaimessa)
-2. Avaa Aanin
-3. Painaa "+" nappia (sijainti: tab bar tai library FAB)
-4. App tarkistaa leikepöydän → YouTube-url esitäyttää kentän
-5. Käyttäjä painaa "Download" → valmis, jatkaa muuta
-6. Kappale ilmestyy kirjastoon kun lataus valmis
-
-**UX-periaatteet:**
-- Ei automaattisia popupeja — käyttäjä initioi aina
-- Downloads-välilehti jää taustatoiminnoksi, ei päänavigaatioon
-- Latauksen eteneminen ei ole kriittinen info — kirjasto päivittyy kun valmis
-
-**Tekninen:**
-- `expo-clipboard` → `Clipboard.getStringAsync()` napin painalluksella
-- Validoi YouTube URL regex ennen esitäyttöä
-- Sama `submitDownload` store-action kuin nykyisin
+- Bun + Hono API on Railway
+- yt-dlp downloads audio, uploads to R2
+- BullMQ-style queue for processing jobs
+- WebSocket connection: real-time status updates to mobile
+- Downloads tab: clipboard-aware "+" button reveals URL input, validates
+  YouTube URLs before submit
+- Server-side BPM detection on ingest
 
 ---
 
-## Phase 3 — Web-sovellus (Next.js)
+## Phase 3 — Web companion app ✅
 
-### Visio
-Selainpohjainen companion-app joka käyttää samaa backendejä kuin mobiili.
-Kun olet koneella, lisäät YouTube-urleja suoraan selaimesta — kappaleet
-latautuvat ja ilmestyvät kirjastoon, joka synkronoituu automaattisesti
-mobiiliin kun palaat puhelimelle.
-
-### Stack
-- **Framework:** Next.js (App Router)
-- **Auth:** `@clerk/nextjs` — sama Clerk-sovellus kuin mobiilissa
-- **DB:** `@aani/db` suoraan server componenteista
-- **Tyypitykset:** `@aani/types` jaettu paketti
-
-### Sijainti monoreposssa
-```
-apps/
-├── mobile/     (Expo)
-├── api/        (Bun + Hono)
-└── web/        (Next.js) ← uusi
-```
-
-### Ominaisuudet
-
-**YouTube-lisäys**
-- URL-kenttä + lähetysnappi (sama API-endpoint kuin mobiilissa)
-- Clipboard-tunnistus: sivulle navigoitaessa tai kentän fokuksessa
-- Latauksen tila WebSocketin kautta reaaliajassa
-
-**Kirjasto**
-- Lista kaikista ladatuista kappaleista
-- Sortaus: lisäyspäivä, nimi, artisti
-- Metatietojen muokkaus (title, artist, BPM)
-
-**Downloads-historia**
-- Aktiiviset ja valmiit lataukset
-- Virheiden näyttö
-
-### Ei tarvita
-- Audio-playback selaimessa (mobiili on soitin)
-- Tiedostoimportti laitteelta (mobiili-feature)
-- Playlist-hallinta (voi lisätä myöhemmin)
-
-### Tekninen
-- Sama `CLERK_SECRET_KEY` + `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY`
-- WebSocket yhteys samaan `NEXT_PUBLIC_WS_URL`:iin
-- Deploy: Vercel (tai Railway jos haluaa pitää yhdessä paikassa)
+- Next.js (App Router) at `apps/web/`, deployed to Vercel
+- Same Clerk app as mobile (`@clerk/nextjs`)
+- Same API as mobile — no separate backend
+- Routes shipped: sign-in / sign-up, library, playlists, downloads, settings
+- WebSocket connection to the same API endpoint
 
 ---
 
-## Phase 4 — Discogs-integraatio
+## Phase 4 — Discogs integration
 
-### Visio
-Räätälöity Discogs-selain suoraan appissa. Käyttäjä voi hakea julkaisuja,
-nähdä tracklistan ja YouTube-linkit, ladata äänen suoraan — ilman että
-poistuu sovelluksesta. Lisäksi oman collectionin ja wantlistin selaus.
+### Shipped
 
-### Ominaisuudet
+- Manual enrichment from the player screen: a disc icon opens a sheet
+  that searches Discogs by `artist + title`, lets you pick the matching
+  release, fetches genres/styles/year/label/cat#/cover, and persists them
+  on the track
+- Collection and wantlist toggles per release; writes to Discogs and
+  mirrors membership in a local `discogs_user_items` cache
+- Wantlist note round-trips through Discogs's own notes field
+- Header dot signals state at a glance (green = collection, red = wantlist)
 
-**Haku & selaus**
-- Haku artistin, julkaisun tai kappaleen nimellä
-- Tulokset: kansi, artisti, levy, vuosi, formaatti
-- Release-sivu: tracklist, notes, YouTube-linkit, versiot
+### Planned
 
-**Lataus Discogsin kautta**
-- YouTube-linkit näkyvät release-sivulla suoraan
-- Yksi tap → lataus alkaa, metadata tulee automaattisesti Discogsilta
-  (artisti, nimi, kansi, vuosi, label)
-- Fallback: jos YouTube-linkkiä ei löydy → clipboard/manuaalinen URL
+**Local mirror of collection + wantlist** — paginate the
+`/users/{u}/collection/folders/0/releases` and `/users/{u}/wants`
+endpoints into a `discogs_user_releases` table. Powers fast scoped
+search, reliable auto-matching at ingest, and the future browser. See
+TODO.md ("Discogs mirror") for the schema and sync strategy.
 
-**Collection & Wantlist**
-- Oman levy-kokoelman selaus ja haku
-- Wantlist-selaus: näe mitä haluaisit, lataa previewt
-- Merkintä: onko biisi jo ladattu Aaniin
+**Auto-match at ingest** — after a YouTube download finishes, prompt
+"In your collection / wantlist / other?" and run a scoped local search.
+If exactly one hit → enrich silently. Otherwise show a small picker.
+Depends on the local mirror.
 
-**Autentikointi**
-- Discogs OAuth 1.0a
-- Token-vaihto backendin kautta (lisätään API:lle)
-- Mahdollistaa collection + wantlist + rating-toiminnot
+**Custom in-app browser** — a full Discogs browser inside the app.
+Search any release, see tracklist + YouTube links, one-tap download
+with metadata flowing in from Discogs. Browse your own collection and
+wantlist as first-class views.
 
-### Tekninen
-- Discogs REST API v2, ilmainen, 60 req/min autentikoituneena
-- OAuth 1.0a token flow API:n kautta
-- Kannet: `api.discogs.com/images/`
-- YouTube-linkit: `release.videos[]` kenttä
+### Technical notes
 
-### Vaiheistus
-1. Haku + release-sivu + YouTube-lataus (ei Discogs-authia)
-2. Discogs OAuth + collection-selaus
-3. Wantlist + hallinta (lisää/poista/rate)
+- Discogs REST API v2, free, 60 req/min authenticated
+- Personal Access Token (no OAuth needed for a single-user app)
+- Cover images: `api.discogs.com/images/...`
+- YouTube links: `release.videos[]` (used by the future browser)
 
 ---
 
-## Phase 5 — Tulevaisuus (ei aikataulua)
+## Phase 5 — Future (no schedule)
 
-**Share Extension**
-Native iOS/Android share extension: jaa YouTube-url suoraan selaimesta
-Aaniin ilman sovelluksen avaamista. Vaatii Expo bare workflow tai
-custom native build target.
+**Share Extension** — Native iOS / Android share extension: share a
+YouTube URL straight from the browser into Aani without opening it.
+Requires Expo bare workflow or a custom native build target.
 
-**Automaattinen BPM-tunnistus**
-Audio-analyysi ingestissä, täyttää `originalBpm` automaattisesti.
+**Downbeat detection** — Server-side audio analysis at ingest, store
+phase + downbeat array on each track. Foundation for beatmatch,
+auto-cue, loops, and crossfade-on-the-one. See TODO.md.
 
-**Aaltomuoto-visualisointi**
-Seekbarin alla näkyy waveform.
+**Waveform visualization** — Render a waveform under the seek bar.
+
+**RN New Architecture migration** — Blocked on
+react-native-track-player v5 stable or a concrete RN legacy-removal
+timeline. See TODO.md.
 
 ---
 
 ## Data Models
 
-### `tracks` (globaali, jaettu)
+### `tracks` (global, deduped, shared across users)
+
 ```
-id            uuid PK
-youtubeId     text UNIQUE NOT NULL   ← dedup-avain, 11-merkkinen YT video ID
-title         text NOT NULL
-artist        text
-duration      integer (seconds)
-fileKey       text (R2: tracks/{trackId}.m4a)
-fileSize      integer (bytes)
-format        text
-sourceUrl     text                   ← alkuperäinen YouTube URL
-downloadedAt  timestamp DEFAULT now()
-discogsReleaseId  text (nullable, Phase 4)
-coverUrl      text (nullable, Phase 4)
-label         text (nullable, Phase 4)
-year          integer (nullable, Phase 4)
+id                  uuid PK
+source              text NOT NULL          -- 'youtube' | 'upload' | …
+source_id           text                   -- e.g. YouTube video ID
+content_hash        text UNIQUE NOT NULL   -- SHA-256 of audio bytes (dedup key)
+title               text NOT NULL
+artist              text
+duration            integer (seconds)
+file_key            text NOT NULL          -- R2: tracks/{content_hash}.{ext}
+file_size           integer (bytes)
+format              text
+source_url          text                   -- original URL the track came from
+downloaded_at       timestamp DEFAULT now()
+discogs_release_id  text                   -- nullable, set after enrichment
+discogs_metadata    jsonb                  -- nullable, full enrichment payload
+UNIQUE (source, source_id) WHERE source_id IS NOT NULL
 ```
 
-### `user_tracks` (per-user kirjasto)
+### `user_tracks` (per-user library)
+
 ```
-id          uuid PK
-userId      text NOT NULL (Clerk user ID)
-trackId     uuid FK → tracks.id (cascade delete)
-addedAt     timestamp DEFAULT now()
-originalBpm real (nullable)          ← user-spesifinen
-UNIQUE (userId, trackId)
+id            uuid PK
+user_id       text NOT NULL                -- Clerk user ID
+track_id      uuid FK → tracks.id (cascade delete)
+added_at      timestamp DEFAULT now()
+original_bpm  real                         -- user-specific
+local_uri     text                         -- nullable, on-device file URI cache
+UNIQUE (user_id, track_id)
 ```
 
 ### `playlists`
+
 ```
-id         uuid PK
-userId     text
-name       text NOT NULL
-createdAt  timestamp DEFAULT now()
-updatedAt  timestamp DEFAULT now()
+id          uuid PK
+user_id     text
+name        text NOT NULL
+created_at  timestamp DEFAULT now()
+updated_at  timestamp DEFAULT now()
 ```
 
 ### `playlist_tracks`
+
 ```
 id          uuid PK
-playlistId  uuid FK → playlists.id
-trackId     uuid FK → tracks.id
+playlist_id uuid FK → playlists.id
+track_id    uuid FK → tracks.id
 position    integer NOT NULL
+UNIQUE (playlist_id, track_id)
 ```
 
 ### `playback_state`
+
 ```
-id            uuid PK
-userId        text
-trackId       uuid FK → tracks.id
-playbackRate  real DEFAULT 1.0
-lastPosition  integer DEFAULT 0 (seconds)
-updatedAt     timestamp DEFAULT now()
+id             uuid PK
+user_id        text
+track_id       uuid FK → tracks.id
+playback_rate  real DEFAULT 1.0
+last_position  integer DEFAULT 0 (seconds)
+updated_at     timestamp DEFAULT now()
+UNIQUE (user_id, track_id)
+```
+
+### `queue_items` (persistent play queue per user)
+
+```
+id        uuid PK
+user_id   text NOT NULL
+track_id  uuid FK → tracks.id
+position  integer NOT NULL
+added_at  timestamp DEFAULT now()
+```
+
+### `user_player_state`
+
+```
+user_id           text PK
+current_position  integer DEFAULT 0
+updated_at        timestamp DEFAULT now()
 ```
 
 ### `download_jobs`
+
 ```
-id          uuid PK
-userId      text
-url         text NOT NULL
-youtubeId   text                     ← ekstraktoitu URL:sta
-status      text (queued | downloading | uploading | completed | failed)
-title       text
-artist      text
-duration    integer
-trackId     uuid (FK → tracks.id, kun valmis)
-error       text
-createdAt   timestamp DEFAULT now()
-completedAt timestamp
+id           uuid PK
+user_id      text
+url          text NOT NULL
+youtube_id   text                          -- extracted from URL
+status       text                          -- queued | downloading | uploading | completed | failed
+title        text
+artist       text
+duration     integer
+track_id     uuid FK → tracks.id           -- set when complete
+error        text
+created_at   timestamp DEFAULT now()
+completed_at timestamp
 ```
 
-## Duplikaattilogiikka
+### `discogs_user_items` (membership cache)
 
-Ennen latauksen aloittamista:
-1. Ekstraktoi `youtubeId` URL:sta
-2. Tarkista onko `youtubeId` jo `tracks`-taulussa
-3. Jos on → luo vain `user_tracks`-rivi, ei latausta → välitön
-4. Jos ei → lataa, tallenna `tracks/{trackId}.m4a`, luo `tracks` + `user_tracks`
+```
+id           uuid PK
+user_id      text NOT NULL
+release_id   text NOT NULL                 -- Discogs release ID
+type         text NOT NULL                 -- 'collection' | 'wantlist'
+synced_at    timestamptz DEFAULT now()
+UNIQUE (user_id, release_id, type)
+```
+
+Source of truth is always Discogs. This table is a local mirror so
+badges render fast without round-tripping to Discogs every screen open.
+
+---
+
+## Deduplication
+
+Tracks are content-addressed. The dedup key is `tracks.content_hash`
+(SHA-256 of the audio bytes). The R2 file key follows the hash, so
+identical audio uploaded twice resolves to the same R2 object.
+
+For source-based pre-checks (avoid downloading the same YouTube video
+twice), there's also a unique index on `(source, source_id)` when
+`source_id IS NOT NULL`.
+
+**Ingest flow:**
+
+1. yt-dlp downloads the audio and computes the content hash (or, for
+   uploads, the client computes it before upload).
+2. If a row in `tracks` already has that `content_hash` → reuse it,
+   create only a `user_tracks` row → instant.
+3. Otherwise → upload to `tracks/{content_hash}.{ext}` in R2, insert a
+   `tracks` row, then insert `user_tracks`.
+
+For YouTube URLs specifically:
 
 ```typescript
 function extractYoutubeId(url: string): string | null {
@@ -281,21 +287,30 @@ function extractYoutubeId(url: string): string | null {
     /youtu\.be\/([a-zA-Z0-9_-]{11})/,
   ];
   for (const re of patterns) {
-    const match = url.match(re);
-    if (match) return match[1];
+    const m = url.match(re);
+    if (m) return m[1];
   }
   return null;
 }
 ```
 
+`source_id` is set to the extracted YouTube ID at ingest, which lets us
+short-circuit before downloading: if a track already exists with
+`source='youtube'` and that `source_id`, we just link the user without
+fetching.
+
 ---
 
-## Konventiot
+## Conventions
 
-- DB: Drizzle ORM, ei raw SQL
-- Zustand stores: yksi per domain (`library`, `player`, `playlists`, `downloads`)
-- Hooks: `use`-prefix, `hooks/`-kansiossa
-- Ympäristömuuttujat: `EXPO_PUBLIC_` clientille, muut API:lla
-- R2-access presigned URL:ien kautta, ei suoria credentials clientille
-- Error handling: `{ data, error }` result pattern
-- BPM: tallennetaan aina originaali, current = `originalBpm * playbackRate`
+- DB: Drizzle ORM, no raw SQL strings (migrations are hand-rolled SQL,
+  applied via `npm run db:apply` from `packages/db/`)
+- Zustand stores: one per domain (`library`, `player`, `playlists`,
+  `downloads`, …)
+- Hooks: `use*` prefix, in `hooks/`
+- Env vars: `EXPO_PUBLIC_` for client; everything else stays server-side
+- R2 access via presigned URLs only; never expose credentials to the client
+- Error handling: `{ data, error }` result pattern — no unhandled rejections
+- BPM: always store the original; current = `originalBpm * playbackRate`
+- Playback rate: float to two decimals (e.g. `1.05`, `0.98`)
+- All user-scoped DB queries filter on `userId` (Clerk user ID)
