@@ -29,14 +29,12 @@ function TrackItem({ track, onPress, onLongPress }: TrackItemProps) {
       onLongPress={onLongPress}
       android_ripple={{ color: "rgba(255,255,255,0.08)" }}
     >
-      <View style={styles.artworkWrap}>
-        <View style={styles.artwork}>
-          {thumb ? (
-            <Image source={{ uri: thumb }} style={styles.artworkImage} />
-          ) : (
-            <Text style={styles.artworkIcon}>♫</Text>
-          )}
-        </View>
+      <View style={styles.artwork}>
+        {thumb ? (
+          <Image source={{ uri: thumb }} style={styles.artworkImage} />
+        ) : (
+          <Text style={styles.artworkIcon}>♫</Text>
+        )}
         {dotColor ? (
           <View style={[styles.dot, { backgroundColor: dotColor }]} />
         ) : null}
@@ -68,22 +66,18 @@ const styles = StyleSheet.create({
   pressed: {
     backgroundColor: "rgba(255,255,255,0.05)",
   },
-  artworkWrap: {
+  artwork: {
     width: 48,
     height: 48,
-  },
-  artwork: {
-    width: "100%",
-    height: "100%",
     borderRadius: 8,
     backgroundColor: "#1a1a1a",
     justifyContent: "center",
     alignItems: "center",
-    overflow: "hidden",
   },
   artworkImage: {
     width: "100%",
     height: "100%",
+    borderRadius: 8,
   },
   artworkIcon: {
     fontSize: 20,

@@ -79,7 +79,6 @@ export const discogsUserReleases = pgTable(
     notes: text("notes"),
     dateAdded: timestamp("date_added", { withTimezone: true }),
     searchText: text("search_text"),
-    raw: jsonb("raw"),
     syncedAt: timestamp("synced_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

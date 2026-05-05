@@ -27,7 +27,7 @@ import {
   searchLocalReleases,
   searchReleases,
   syncDiscogsForUser,
-  upsertReleaseRowExternal,
+  upsertReleaseRows,
   type LocalSearchScope,
 } from "../lib/discogs";
 import { broadcast } from "../ws/connections";
@@ -55,40 +55,10 @@ async function userOwnsTrack(userId: string, trackId: string) {
   return !!row;
 }
 
-async function upsertCollectionMembership(
-  userId: string,
-  releaseId: string,
-  metadata: DiscogsMetadata,
-) {
-  const instances = await getCollectionInstances(releaseId);
-  const first = instances[0];
-  await upsertReleaseRowExternal(
-    db,
-    metadataToRow(userId, "collection", metadata, {
-      folderId: first?.folder_id ?? null,
-      instanceId: first?.instance_id ?? null,
-    }),
-  );
-}
-
-async function upsertWantlistMembership(
-  userId: string,
-  releaseId: string,
-  metadata: DiscogsMetadata,
-  note: string | null,
-) {
-  await upsertReleaseRowExternal(
-    db,
-    metadataToRow(userId, "wantlist", metadata, { notes: note }),
-  );
-}
-
 /**
- * Push-on-write helper: ensure the local mirror reflects the current Discogs
- * state for this (release, type) pair. Either upserts a full row (when the
- * user is a member) or deletes it. `metadata` is required for the add path —
- * callers fetch the release detail before calling this if they don't already
- * have it.
+ * Push-on-write: keep the local mirror in sync with Discogs after the API
+ * itself mutates membership. Pass `metadata` for the add path (callers fetch
+ * the release if they don't already have it).
  */
 async function syncMembership(
   userId: string,
@@ -98,14 +68,22 @@ async function syncMembership(
   metadata: DiscogsMetadata | null,
   extras?: { note?: string | null },
 ) {
-  if (isMember && metadata) {
-    if (type === "collection") {
-      await upsertCollectionMembership(userId, releaseId, metadata);
-    } else {
-      await upsertWantlistMembership(userId, releaseId, metadata, extras?.note ?? null);
-    }
-  } else {
+  if (!isMember || !metadata) {
     await deleteUserRelease(db, userId, releaseId, type);
+    return;
+  }
+  if (type === "collection") {
+    const [first] = await getCollectionInstances(releaseId);
+    await upsertReleaseRows(db, [
+      metadataToRow(userId, "collection", metadata, {
+        folderId: first?.folder_id ?? null,
+        instanceId: first?.instance_id ?? null,
+      }),
+    ]);
+  } else {
+    await upsertReleaseRows(db, [
+      metadataToRow(userId, "wantlist", metadata, { notes: extras?.note ?? null }),
+    ]);
   }
 }
 
@@ -134,10 +112,7 @@ discogsRoute.post("/discogs/enrich", async (c) => {
   }
 
   try {
-    const release = await getRelease(releaseId);
-    if (!release) return c.json({ error: "Release not found" }, 404);
-
-    const metadata: DiscogsMetadata = releaseToMetadata(release);
+    const metadata = await fetchReleaseMetadata(releaseId);
 
     await db
       .update(tracks)
@@ -229,7 +204,7 @@ discogsRoute.get("/discogs/track/:trackId", async (c) => {
   }
 });
 
-async function fetchMetadataForToggle(releaseId: string): Promise<DiscogsMetadata> {
+async function fetchReleaseMetadata(releaseId: string): Promise<DiscogsMetadata> {
   const release = await getRelease(releaseId);
   if (!release) throw new DiscogsError("Release not found", 404);
   return releaseToMetadata(release);
@@ -242,7 +217,7 @@ discogsRoute.post("/discogs/collection", async (c) => {
   try {
     const already = await isInCollection(releaseId);
     if (!already) await addToCollection(releaseId);
-    const metadata = await fetchMetadataForToggle(releaseId);
+    const metadata = await fetchReleaseMetadata(releaseId);
     await syncMembership(userId, releaseId, "collection", true, metadata);
     return c.json({ ok: true, alreadyExists: already });
   } catch (err) {
@@ -274,7 +249,7 @@ discogsRoute.post("/discogs/wantlist", async (c) => {
   try {
     await putWant(releaseId, note);
     const wantEntry = await getWantEntry(releaseId);
-    const metadata = await fetchMetadataForToggle(releaseId);
+    const metadata = await fetchReleaseMetadata(releaseId);
     await syncMembership(userId, releaseId, "wantlist", true, metadata, {
       note: wantEntry.note,
     });
@@ -297,10 +272,6 @@ discogsRoute.delete("/discogs/wantlist/:releaseId", async (c) => {
     return c.json(body, status as 400 | 401 | 404 | 500 | 503);
   }
 });
-
-// ---------------------------------------------------------------------------
-// Mirror sync + local search + auto-match
-// ---------------------------------------------------------------------------
 
 const activeSyncs = new Map<string, Promise<void>>();
 
@@ -367,9 +338,6 @@ discogsRoute.post("/discogs/sync", async (c) => {
   })();
 
   activeSyncs.set(userId, run);
-
-  // Don't block the response on the full sync — the client tracks progress
-  // over the WS channel.
   return c.json({ status: "started", incremental });
 });
 

@@ -10,13 +10,13 @@ import { env } from "./env";
 const DISCOGS_API = "https://api.discogs.com";
 const USER_AGENT = "Aani/1.0 +https://aani.cc";
 const COLLECTION_FOLDER_ID = 1;
-// Read folder 0 = "All", which Discogs uses for the union of every folder.
+// Folder 0 is "All folders", the union view Discogs exposes for the user's
+// full collection regardless of how it's organized.
 const ALL_FOLDER_ID = 0;
 const PER_PAGE = 100;
-// Throttle paged reads when the per-minute window starts running thin. The
-// authenticated ceiling is 60 req/min; a single full sync of ~95 pages comes
-// in just under that without any delay, but we slow down once the server
-// reports we're nearly out of budget so we don't trip the 429.
+// Authenticated ceiling is 60 req/min. A full sync (~95 pages) fits under
+// that, but we slow down once the server reports we're near the budget so
+// we don't trip a 429.
 const RATE_LIMIT_LOW_WATERMARK = 5;
 const RATE_LIMIT_BACKOFF_MS = 1500;
 const RATE_LIMIT_429_BACKOFF_MS = 60_000;
@@ -258,12 +258,6 @@ export async function removeFromWantlist(releaseId: string) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Mirror sync — paginate the user's collection + wantlist into Postgres so we
-// can do local search and scope-filtered matching without paging Discogs on
-// every request.
-// ---------------------------------------------------------------------------
-
 export type DiscogsBasicInfo = {
   id: number;
   title?: string;
@@ -311,13 +305,22 @@ type WantlistPage = {
 };
 
 /**
- * Iterate every page of a user's collection or wantlist. Discogs sorts by
- * `added desc` so callers doing an incremental sync can stop pulling pages
- * once they hit a `date_added` they've already mirrored locally.
+ * Yield items from every page of a user's collection or wantlist, one item at
+ * a time. Discogs sorts by `added desc` so callers doing an incremental sync
+ * can stop pulling pages once they hit a `date_added` they've already mirrored
+ * locally. For batch DB writes, prefer `paginateUserListByPage`.
  */
 export async function* paginateUserList<T extends DiscogsCollectionItem | DiscogsWantlistItem>(
   kind: "collection" | "wantlist",
 ): AsyncGenerator<T> {
+  for await (const page of paginateUserListByPage<T>(kind)) {
+    for (const item of page) yield item;
+  }
+}
+
+export async function* paginateUserListByPage<
+  T extends DiscogsCollectionItem | DiscogsWantlistItem,
+>(kind: "collection" | "wantlist"): AsyncGenerator<T[]> {
   const { username } = ensureCredentials();
   const basePath = kind === "collection"
     ? `/users/${encodeURIComponent(username)}/collection/folders/${ALL_FOLDER_ID}/releases`
@@ -352,9 +355,7 @@ export async function* paginateUserList<T extends DiscogsCollectionItem | Discog
     }
     if (!result.data) return;
     const items = (result.data as Record<string, unknown>)[itemsKey] as T[] | undefined;
-    if (items) {
-      for (const item of items) yield item;
-    }
+    if (items && items.length > 0) yield items;
     totalPages = result.data.pagination?.pages ?? page;
     await rateLimitDelay(result.response);
     page += 1;
@@ -404,7 +405,7 @@ function parseDate(s?: string | null): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-type ReleaseRowInput = {
+export type ReleaseRowInput = {
   userId: string;
   releaseId: string;
   type: DiscogsUserReleaseType;
@@ -421,22 +422,13 @@ type ReleaseRowInput = {
   notes: string | null;
   dateAdded: Date | null;
   searchText: string;
-  raw: unknown;
 };
 
-export function collectionItemToRow(
-  userId: string,
-  item: DiscogsCollectionItem,
-): ReleaseRowInput {
-  const info = item.basic_information;
+function basicInfoFields(info: DiscogsBasicInfo | undefined) {
   const artist = joinArtists(info?.artists);
   const { label, catno } = firstLabel(info);
   const year = typeof info?.year === "number" && info.year > 0 ? info.year : null;
-  const noteField = item.notes?.find((n) => n.value)?.value ?? null;
   return {
-    userId,
-    releaseId: String(info?.id ?? item.id),
-    type: "collection",
     artist,
     title: info?.title ?? null,
     label,
@@ -445,12 +437,24 @@ export function collectionItemToRow(
     format: formatString(info),
     thumbUrl: info?.thumb ?? null,
     coverUrl: info?.cover_image ?? null,
+    searchText: buildSearchText([artist, info?.title, label, catno, year]),
+  };
+}
+
+export function collectionItemToRow(
+  userId: string,
+  item: DiscogsCollectionItem,
+): ReleaseRowInput {
+  const info = item.basic_information;
+  return {
+    userId,
+    releaseId: String(info?.id ?? item.id),
+    type: "collection",
+    ...basicInfoFields(info),
     folderId: item.folder_id ?? null,
     instanceId: item.instance_id ?? null,
-    notes: noteField,
+    notes: item.notes?.find((n) => n.value)?.value ?? null,
     dateAdded: parseDate(item.date_added),
-    searchText: buildSearchText([artist, info?.title, label, catno, year]),
-    raw: item,
   };
 }
 
@@ -459,27 +463,15 @@ export function wantlistItemToRow(
   item: DiscogsWantlistItem,
 ): ReleaseRowInput {
   const info = item.basic_information;
-  const artist = joinArtists(info?.artists);
-  const { label, catno } = firstLabel(info);
-  const year = typeof info?.year === "number" && info.year > 0 ? info.year : null;
   return {
     userId,
     releaseId: String(info?.id ?? item.id),
     type: "wantlist",
-    artist,
-    title: info?.title ?? null,
-    label,
-    catalogNumber: catno,
-    year,
-    format: formatString(info),
-    thumbUrl: info?.thumb ?? null,
-    coverUrl: info?.cover_image ?? null,
+    ...basicInfoFields(info),
     folderId: null,
     instanceId: null,
     notes: item.notes ?? null,
     dateAdded: parseDate(item.date_added),
-    searchText: buildSearchText([artist, info?.title, label, catno, year]),
-    raw: item,
   };
 }
 
@@ -494,9 +486,6 @@ export function metadataToRow(
     dateAdded?: Date | null;
   } = {},
 ): ReleaseRowInput {
-  const formatStr = metadata.format?.length
-    ? metadata.format.join(", ")
-    : null;
   return {
     userId,
     releaseId: metadata.releaseId,
@@ -506,7 +495,7 @@ export function metadataToRow(
     label: metadata.label ?? null,
     catalogNumber: metadata.catalogNumber ?? null,
     year: metadata.year ?? null,
-    format: formatStr,
+    format: metadata.format?.length ? metadata.format.join(", ") : null,
     thumbUrl: metadata.thumbUrl ?? null,
     coverUrl: metadata.coverUrl ?? null,
     folderId: extras.folderId ?? null,
@@ -520,32 +509,17 @@ export function metadataToRow(
       metadata.catalogNumber,
       metadata.year,
     ]),
-    raw: { metadata },
   };
 }
 
-async function upsertReleaseRow(db: Database, row: ReleaseRowInput) {
+export async function upsertReleaseRows(
+  db: Database,
+  rows: ReleaseRowInput[],
+) {
+  if (rows.length === 0) return;
   await db
     .insert(discogsUserReleases)
-    .values({
-      userId: row.userId,
-      releaseId: row.releaseId,
-      type: row.type,
-      artist: row.artist,
-      title: row.title,
-      label: row.label,
-      catalogNumber: row.catalogNumber,
-      year: row.year,
-      format: row.format,
-      thumbUrl: row.thumbUrl,
-      coverUrl: row.coverUrl,
-      folderId: row.folderId,
-      instanceId: row.instanceId,
-      notes: row.notes,
-      dateAdded: row.dateAdded,
-      searchText: row.searchText,
-      raw: row.raw,
-    })
+    .values(rows)
     .onConflictDoUpdate({
       target: [
         discogsUserReleases.userId,
@@ -553,30 +527,22 @@ async function upsertReleaseRow(db: Database, row: ReleaseRowInput) {
         discogsUserReleases.type,
       ],
       set: {
-        artist: row.artist,
-        title: row.title,
-        label: row.label,
-        catalogNumber: row.catalogNumber,
-        year: row.year,
-        format: row.format,
-        thumbUrl: row.thumbUrl,
-        coverUrl: row.coverUrl,
-        folderId: row.folderId,
-        instanceId: row.instanceId,
-        notes: row.notes,
-        dateAdded: row.dateAdded,
-        searchText: row.searchText,
-        raw: row.raw,
-        syncedAt: new Date(),
+        artist: sql`excluded.artist`,
+        title: sql`excluded.title`,
+        label: sql`excluded.label`,
+        catalogNumber: sql`excluded.catalog_number`,
+        year: sql`excluded.year`,
+        format: sql`excluded.format`,
+        thumbUrl: sql`excluded.thumb_url`,
+        coverUrl: sql`excluded.cover_url`,
+        folderId: sql`excluded.folder_id`,
+        instanceId: sql`excluded.instance_id`,
+        notes: sql`excluded.notes`,
+        dateAdded: sql`excluded.date_added`,
+        searchText: sql`excluded.search_text`,
+        syncedAt: sql`NOW()`,
       },
     });
-}
-
-export async function upsertReleaseRowExternal(
-  db: Database,
-  row: ReleaseRowInput,
-) {
-  return upsertReleaseRow(db, row);
 }
 
 export async function deleteUserRelease(
@@ -648,42 +614,11 @@ export async function syncDiscogsForUser(
 ): Promise<SyncResult> {
   const start = Date.now();
   const startedAt = new Date();
-  let collection = 0;
-  let wantlist = 0;
 
-  const collectionCutoff = opts.incremental
-    ? await latestDateAdded(db, userId, "collection")
-    : null;
-  for await (const item of paginateUserList<DiscogsCollectionItem>("collection")) {
-    if (collectionCutoff && parseDate(item.date_added) && parseDate(item.date_added)! <= collectionCutoff) {
-      break;
-    }
-    await upsertReleaseRow(db, collectionItemToRow(userId, item));
-    collection += 1;
-    if (collection % 50 === 0) {
-      await opts.onProgress?.({ phase: "collection", collection, wantlist });
-    }
-  }
-  await opts.onProgress?.({ phase: "collection", collection, wantlist });
-
-  const wantlistCutoff = opts.incremental
-    ? await latestDateAdded(db, userId, "wantlist")
-    : null;
-  for await (const item of paginateUserList<DiscogsWantlistItem>("wantlist")) {
-    if (wantlistCutoff && parseDate(item.date_added) && parseDate(item.date_added)! <= wantlistCutoff) {
-      break;
-    }
-    await upsertReleaseRow(db, wantlistItemToRow(userId, item));
-    wantlist += 1;
-    if (wantlist % 50 === 0) {
-      await opts.onProgress?.({ phase: "wantlist", collection, wantlist });
-    }
-  }
-  await opts.onProgress?.({ phase: "wantlist", collection, wantlist });
+  const collection = await syncOneList(db, userId, "collection", opts);
+  const wantlist = await syncOneList(db, userId, "wantlist", opts, collection);
 
   if (!opts.incremental) {
-    // Prune anything we didn't re-touch this run — those releases were removed
-    // on Discogs.com.
     await db
       .delete(discogsUserReleases)
       .where(
@@ -697,9 +632,46 @@ export async function syncDiscogsForUser(
   return { collection, wantlist, durationMs: Date.now() - start };
 }
 
-// ---------------------------------------------------------------------------
-// Local search + auto-match
-// ---------------------------------------------------------------------------
+async function syncOneList(
+  db: Database,
+  userId: string,
+  phase: "collection" | "wantlist",
+  opts: {
+    incremental?: boolean;
+    onProgress?: (p: SyncProgress) => void | Promise<void>;
+  },
+  collectionCount = 0,
+): Promise<number> {
+  const cutoff = opts.incremental ? await latestDateAdded(db, userId, phase) : null;
+  const toRow = phase === "collection"
+    ? (item: DiscogsCollectionItem | DiscogsWantlistItem) =>
+        collectionItemToRow(userId, item as DiscogsCollectionItem)
+    : (item: DiscogsCollectionItem | DiscogsWantlistItem) =>
+        wantlistItemToRow(userId, item as DiscogsWantlistItem);
+  let count = 0;
+  const emit = () =>
+    opts.onProgress?.({
+      phase,
+      collection: phase === "collection" ? count : collectionCount,
+      wantlist: phase === "wantlist" ? count : 0,
+    });
+
+  for await (const page of paginateUserListByPage<DiscogsCollectionItem | DiscogsWantlistItem>(phase)) {
+    const fresh = cutoff
+      ? page.filter((item) => {
+          const d = parseDate(item.date_added);
+          return !d || d > cutoff;
+        })
+      : page;
+    if (fresh.length === 0) break;
+    await upsertReleaseRows(db, fresh.map(toRow));
+    count += fresh.length;
+    await emit();
+    if (fresh.length < page.length) break;
+  }
+  await emit();
+  return count;
+}
 
 export type LocalSearchScope = "collection" | "wantlist" | "any";
 

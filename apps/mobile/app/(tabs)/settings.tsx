@@ -13,9 +13,33 @@ import * as FileSystem from "expo-file-system";
 import * as Updates from "expo-updates";
 import { useAuth } from "@clerk/clerk-expo";
 import { backfillLocalCache, clearLocalCache, getCacheSizeBytes } from "../../lib/localAudio";
-import { useDiscogsSyncStore } from "../../store/discogsSync";
+import { type DiscogsSyncStatus, useDiscogsSyncStore } from "../../store/discogsSync";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+type StatusInfo = { text: string; tone: "muted" | "ok" | "error" };
+
+function describeDiscogsStatus(status: DiscogsSyncStatus): StatusInfo | null {
+  switch (status.state) {
+    case "idle":
+      return null;
+    case "running":
+      if (status.phase === "starting") {
+        return { text: "Starting sync...", tone: "muted" };
+      }
+      return {
+        text: `Syncing ${status.phase}: ${status[status.phase]}`,
+        tone: "muted",
+      };
+    case "done":
+      return {
+        text: `Synced ${status.collection} + ${status.wantlist} in ${(status.durationMs / 1000).toFixed(1)}s`,
+        tone: "ok",
+      };
+    case "error":
+      return { text: status.error, tone: "error" };
+  }
+}
 
 export default function SettingsScreen() {
   const { getToken, signOut, userId } = useAuth();
@@ -123,13 +147,12 @@ export default function SettingsScreen() {
   }, [fetchDiscogsCounts, getToken]);
 
   useEffect(() => {
-    if (discogsStatus.state === "done") {
-      (async () => {
-        const token = await getToken();
-        if (token) await fetchDiscogsCounts(token);
-      })();
-    }
-  }, [discogsStatus, fetchDiscogsCounts, getToken]);
+    if (discogsStatus.state !== "done") return;
+    (async () => {
+      const token = await getToken();
+      if (token) await fetchDiscogsCounts(token);
+    })();
+  }, [discogsStatus.state, fetchDiscogsCounts, getToken]);
 
   async function handleDiscogsSync(opts: { incremental?: boolean }) {
     setSyncStarting(true);
@@ -147,35 +170,7 @@ export default function SettingsScreen() {
     }
   }
 
-  function discogsStatusLine(): { text: string; tone: "muted" | "ok" | "error" } | null {
-    switch (discogsStatus.state) {
-      case "idle":
-        return null;
-      case "running": {
-        if (discogsStatus.phase === "starting") {
-          return { text: "Starting sync...", tone: "muted" };
-        }
-        const label = discogsStatus.phase === "collection" ? "collection" : "wantlist";
-        const n =
-          discogsStatus.phase === "collection"
-            ? discogsStatus.collection
-            : discogsStatus.wantlist;
-        return {
-          text: `Syncing ${label}: ${n}`,
-          tone: "muted",
-        };
-      }
-      case "done": {
-        const seconds = (discogsStatus.durationMs / 1000).toFixed(1);
-        return {
-          text: `Synced ${discogsStatus.collection} + ${discogsStatus.wantlist} in ${seconds}s`,
-          tone: "ok",
-        };
-      }
-      case "error":
-        return { text: discogsStatus.error, tone: "error" };
-    }
-  }
+  const discogsStatusInfo = describeDiscogsStatus(discogsStatus);
 
   async function checkCookieStatus() {
     if (!API_URL) return;
@@ -377,21 +372,17 @@ export default function SettingsScreen() {
             <Text style={styles.linkBtnText}>Quick sync</Text>
           </Pressable>
         </View>
-        {(() => {
-          const line = discogsStatusLine();
-          if (!line) return null;
-          return (
-            <Text
-              style={[
-                styles.statusMsg,
-                line.tone === "error" && styles.statusMsgError,
-                line.tone === "muted" && styles.statusMsgMuted,
-              ]}
-            >
-              {line.text}
-            </Text>
-          );
-        })()}
+        {discogsStatusInfo && (
+          <Text
+            style={[
+              styles.statusMsg,
+              discogsStatusInfo.tone === "error" && styles.statusMsgError,
+              discogsStatusInfo.tone === "muted" && styles.statusMsgMuted,
+            ]}
+          >
+            {discogsStatusInfo.text}
+          </Text>
+        )}
         {syncError && (
           <Text style={[styles.statusMsg, styles.statusMsgError]}>{syncError}</Text>
         )}
