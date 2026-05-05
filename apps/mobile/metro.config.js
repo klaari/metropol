@@ -1,4 +1,6 @@
 const { getDefaultConfig } = require("expo/metro-config");
+const { withNativeWind } = require("nativewind/metro");
+
 const path = require("path");
 
 const projectRoot = __dirname;
@@ -19,4 +21,4 @@ config.resolver.nodeModulesPaths = [
 // so that "main": "expo-router/entry" is used as the entry point
 config.resolver.disableHierarchicalLookup = true;
 
-module.exports = config;
+module.exports = withNativeWind(config, { input: "./global.css" });

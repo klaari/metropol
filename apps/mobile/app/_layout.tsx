@@ -1,4 +1,5 @@
 import "react-native-get-random-values";
+import "../global.css";
 import { ClerkProvider, useAuth } from "@clerk/clerk-expo";
 import { tokenCache } from "@clerk/clerk-expo/token-cache";
 import { ErrorBoundary } from "expo-router";
