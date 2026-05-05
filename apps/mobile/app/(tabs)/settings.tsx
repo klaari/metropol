@@ -152,9 +152,16 @@ export default function SettingsScreen() {
       case "idle":
         return null;
       case "running": {
-        const phase = discogsStatus.phase === "starting" ? "starting" : discogsStatus.phase;
+        if (discogsStatus.phase === "starting") {
+          return { text: "Starting sync...", tone: "muted" };
+        }
+        const label = discogsStatus.phase === "collection" ? "collection" : "wantlist";
+        const n =
+          discogsStatus.phase === "collection"
+            ? discogsStatus.collection
+            : discogsStatus.wantlist;
         return {
-          text: `Syncing ${phase}: ${discogsStatus.collection} collection / ${discogsStatus.wantlist} wantlist`,
+          text: `Syncing ${label}: ${n}`,
           tone: "muted",
         };
       }

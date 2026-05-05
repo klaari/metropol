@@ -53,10 +53,12 @@ export const useDiscogsSyncStore = create<DiscogsSyncState>((set, get) => ({
       "/discogs/local/counts",
       token,
     );
-    set({
-      counts: data ?? { collection: 0, wantlist: 0 },
-      countsLoading: false,
-    });
+    if (data) {
+      set({ counts: data, countsLoading: false });
+    } else {
+      // Transient API failure — keep the previous counts rather than flashing 0.
+      set({ countsLoading: false });
+    }
   },
 
   startSync: async (token, opts = {}) => {
@@ -66,7 +68,12 @@ export const useDiscogsSyncStore = create<DiscogsSyncState>((set, get) => ({
     const { error } = await apiFetch<{ status: string }>(path, token, {
       method: "POST",
     });
-    if (error) return { error };
+    if (error) {
+      if (error === "HTTP 409") {
+        return { error: "A sync is already in progress — please wait." };
+      }
+      return { error };
+    }
     set({
       status: {
         state: "running",
@@ -93,6 +100,10 @@ export const useDiscogsSyncStore = create<DiscogsSyncState>((set, get) => ({
 
   handleWsMessage: (msg) => {
     if (msg.phase === "done") {
+      // msg.collection / msg.wantlist are "items processed this run", not the
+      // DB total — so an incremental sync that finds nothing new reports 0/0.
+      // The settings screen separately calls fetchCounts on done to read the
+      // real total from /discogs/local/counts.
       set({
         status: {
           state: "done",
@@ -102,7 +113,6 @@ export const useDiscogsSyncStore = create<DiscogsSyncState>((set, get) => ({
           durationMs: msg.durationMs ?? 0,
           finishedAt: Date.now(),
         },
-        counts: { collection: msg.collection, wantlist: msg.wantlist },
       });
       return;
     }
