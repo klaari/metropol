@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from "bun";
-import type { WsJobStatusMessage } from "@aani/types";
+import type { WsServerMessage } from "@aani/types";
 
 export interface WsData {
   token: string;
@@ -24,7 +24,7 @@ export function removeConnection(userId: string, ws: ServerWebSocket<WsData>) {
   if (set.size === 0) connections.delete(userId);
 }
 
-export function broadcast(userId: string, message: WsJobStatusMessage) {
+export function broadcast(userId: string, message: WsServerMessage) {
   const set = connections.get(userId);
   if (!set) return;
   const data = JSON.stringify(message);

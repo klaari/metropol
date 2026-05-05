@@ -131,3 +131,22 @@ export interface WsJobStatusMessage {
   error: string | null;
   progress: number | null;
 }
+
+export type DiscogsSyncPhase =
+  | "starting"
+  | "collection"
+  | "wantlist"
+  | "done"
+  | "error";
+
+export interface WsDiscogsSyncMessage {
+  type: "discogs:sync";
+  phase: DiscogsSyncPhase;
+  collection: number;
+  wantlist: number;
+  total: number | null;
+  durationMs: number | null;
+  error: string | null;
+}
+
+export type WsServerMessage = WsJobStatusMessage | WsDiscogsSyncMessage;

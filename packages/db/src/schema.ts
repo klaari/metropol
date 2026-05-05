@@ -57,24 +57,45 @@ export const tracks = pgTable(
   ],
 );
 
-export const discogsUserItems = pgTable(
-  "discogs_user_items",
+export type DiscogsUserReleaseType = "collection" | "wantlist";
+
+export const discogsUserReleases = pgTable(
+  "discogs_user_releases",
   {
     id: uuid("id").primaryKey().defaultRandom(),
     userId: text("user_id").notNull(),
     releaseId: text("release_id").notNull(),
-    type: text("type").notNull(),
+    type: text("type").$type<DiscogsUserReleaseType>().notNull(),
+    artist: text("artist"),
+    title: text("title"),
+    label: text("label"),
+    catalogNumber: text("catalog_number"),
+    year: integer("year"),
+    format: text("format"),
+    thumbUrl: text("thumb_url"),
+    coverUrl: text("cover_url"),
+    folderId: integer("folder_id"),
+    instanceId: integer("instance_id"),
+    notes: text("notes"),
+    dateAdded: timestamp("date_added", { withTimezone: true }),
+    searchText: text("search_text"),
+    raw: jsonb("raw"),
     syncedAt: timestamp("synced_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
   },
   (t) => [
-    uniqueIndex("discogs_user_items_user_release_type_idx").on(
+    uniqueIndex("discogs_user_releases_user_release_type_idx").on(
       t.userId,
       t.releaseId,
       t.type,
     ),
-    index("discogs_user_items_user_idx").on(t.userId),
+    index("discogs_user_releases_user_type_idx").on(t.userId, t.type),
+    index("discogs_user_releases_user_date_added_idx").on(
+      t.userId,
+      t.type,
+      t.dateAdded,
+    ),
   ],
 );
 

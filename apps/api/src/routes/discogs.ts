@@ -1,26 +1,36 @@
 import { Hono } from "hono";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   createDb,
+  discogsUserReleases,
   tracks,
   userTracks,
-  discogsUserItems,
   type DiscogsMetadata,
+  type DiscogsUserReleaseType,
 } from "@aani/db";
+import type { WsDiscogsSyncMessage } from "@aani/types";
 import { clerkAuth } from "../middleware/auth";
 import { env } from "../lib/env";
 import {
   DiscogsError,
   addToCollection,
+  deleteUserRelease,
+  getCollectionInstances,
   getRelease,
   getWantEntry,
   isInCollection,
+  metadataToRow,
   putWant,
   releaseToMetadata,
   removeFromCollection,
   removeFromWantlist,
+  searchLocalReleases,
   searchReleases,
+  syncDiscogsForUser,
+  upsertReleaseRowExternal,
+  type LocalSearchScope,
 } from "../lib/discogs";
+import { broadcast } from "../ws/connections";
 
 const db = createDb(env.databaseUrl);
 
@@ -45,34 +55,57 @@ async function userOwnsTrack(userId: string, trackId: string) {
   return !!row;
 }
 
+async function upsertCollectionMembership(
+  userId: string,
+  releaseId: string,
+  metadata: DiscogsMetadata,
+) {
+  const instances = await getCollectionInstances(releaseId);
+  const first = instances[0];
+  await upsertReleaseRowExternal(
+    db,
+    metadataToRow(userId, "collection", metadata, {
+      folderId: first?.folder_id ?? null,
+      instanceId: first?.instance_id ?? null,
+    }),
+  );
+}
+
+async function upsertWantlistMembership(
+  userId: string,
+  releaseId: string,
+  metadata: DiscogsMetadata,
+  note: string | null,
+) {
+  await upsertReleaseRowExternal(
+    db,
+    metadataToRow(userId, "wantlist", metadata, { notes: note }),
+  );
+}
+
+/**
+ * Push-on-write helper: ensure the local mirror reflects the current Discogs
+ * state for this (release, type) pair. Either upserts a full row (when the
+ * user is a member) or deletes it. `metadata` is required for the add path —
+ * callers fetch the release detail before calling this if they don't already
+ * have it.
+ */
 async function syncMembership(
   userId: string,
   releaseId: string,
-  type: "collection" | "wantlist",
+  type: DiscogsUserReleaseType,
   isMember: boolean,
+  metadata: DiscogsMetadata | null,
+  extras?: { note?: string | null },
 ) {
-  if (isMember) {
-    await db
-      .insert(discogsUserItems)
-      .values({ userId, releaseId, type })
-      .onConflictDoUpdate({
-        target: [
-          discogsUserItems.userId,
-          discogsUserItems.releaseId,
-          discogsUserItems.type,
-        ],
-        set: { syncedAt: new Date() },
-      });
+  if (isMember && metadata) {
+    if (type === "collection") {
+      await upsertCollectionMembership(userId, releaseId, metadata);
+    } else {
+      await upsertWantlistMembership(userId, releaseId, metadata, extras?.note ?? null);
+    }
   } else {
-    await db
-      .delete(discogsUserItems)
-      .where(
-        and(
-          eq(discogsUserItems.userId, userId),
-          eq(discogsUserItems.releaseId, releaseId),
-          eq(discogsUserItems.type, type),
-        ),
-      );
+    await deleteUserRelease(db, userId, releaseId, type);
   }
 }
 
@@ -119,8 +152,10 @@ discogsRoute.post("/discogs/enrich", async (c) => {
       getWantEntry(releaseId),
     ]);
 
-    await syncMembership(userId, releaseId, "collection", inCollection);
-    await syncMembership(userId, releaseId, "wantlist", wantEntry.inList);
+    await syncMembership(userId, releaseId, "collection", inCollection, metadata);
+    await syncMembership(userId, releaseId, "wantlist", wantEntry.inList, metadata, {
+      note: wantEntry.note,
+    });
 
     return c.json({
       metadata,
@@ -170,15 +205,20 @@ discogsRoute.get("/discogs/track/:trackId", async (c) => {
     });
   }
   const releaseId = row.discogsReleaseId;
+  const metadata = row.discogsMetadata;
   try {
     const [inCollection, wantEntry] = await Promise.all([
       isInCollection(releaseId),
       getWantEntry(releaseId),
     ]);
-    await syncMembership(userId, releaseId, "collection", inCollection);
-    await syncMembership(userId, releaseId, "wantlist", wantEntry.inList);
+    if (metadata) {
+      await syncMembership(userId, releaseId, "collection", inCollection, metadata);
+      await syncMembership(userId, releaseId, "wantlist", wantEntry.inList, metadata, {
+        note: wantEntry.note,
+      });
+    }
     return c.json({
-      metadata: row.discogsMetadata,
+      metadata,
       inCollection,
       inWantlist: wantEntry.inList,
       wantlistNote: wantEntry.note,
@@ -189,6 +229,12 @@ discogsRoute.get("/discogs/track/:trackId", async (c) => {
   }
 });
 
+async function fetchMetadataForToggle(releaseId: string): Promise<DiscogsMetadata> {
+  const release = await getRelease(releaseId);
+  if (!release) throw new DiscogsError("Release not found", 404);
+  return releaseToMetadata(release);
+}
+
 discogsRoute.post("/discogs/collection", async (c) => {
   const userId = c.get("userId");
   const { releaseId } = await c.req.json<{ releaseId: string }>();
@@ -196,7 +242,8 @@ discogsRoute.post("/discogs/collection", async (c) => {
   try {
     const already = await isInCollection(releaseId);
     if (!already) await addToCollection(releaseId);
-    await syncMembership(userId, releaseId, "collection", true);
+    const metadata = await fetchMetadataForToggle(releaseId);
+    await syncMembership(userId, releaseId, "collection", true, metadata);
     return c.json({ ok: true, alreadyExists: already });
   } catch (err) {
     const { status, body } = handleError(err);
@@ -209,7 +256,7 @@ discogsRoute.delete("/discogs/collection/:releaseId", async (c) => {
   const releaseId = c.req.param("releaseId");
   try {
     const removed = await removeFromCollection(releaseId);
-    await syncMembership(userId, releaseId, "collection", false);
+    await syncMembership(userId, releaseId, "collection", false, null);
     return c.json({ ok: true, removedInstances: removed });
   } catch (err) {
     const { status, body } = handleError(err);
@@ -226,8 +273,11 @@ discogsRoute.post("/discogs/wantlist", async (c) => {
   if (!releaseId) return c.json({ error: "releaseId is required" }, 400);
   try {
     await putWant(releaseId, note);
-    await syncMembership(userId, releaseId, "wantlist", true);
     const wantEntry = await getWantEntry(releaseId);
+    const metadata = await fetchMetadataForToggle(releaseId);
+    await syncMembership(userId, releaseId, "wantlist", true, metadata, {
+      note: wantEntry.note,
+    });
     return c.json({ ok: true, wantlistNote: wantEntry.note });
   } catch (err) {
     const { status, body } = handleError(err);
@@ -240,8 +290,185 @@ discogsRoute.delete("/discogs/wantlist/:releaseId", async (c) => {
   const releaseId = c.req.param("releaseId");
   try {
     await removeFromWantlist(releaseId);
-    await syncMembership(userId, releaseId, "wantlist", false);
+    await syncMembership(userId, releaseId, "wantlist", false, null);
     return c.json({ ok: true });
+  } catch (err) {
+    const { status, body } = handleError(err);
+    return c.json(body, status as 400 | 401 | 404 | 500 | 503);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Mirror sync + local search + auto-match
+// ---------------------------------------------------------------------------
+
+const activeSyncs = new Map<string, Promise<void>>();
+
+function emitSync(userId: string, msg: Omit<WsDiscogsSyncMessage, "type">) {
+  broadcast(userId, { type: "discogs:sync", ...msg });
+}
+
+discogsRoute.post("/discogs/sync", async (c) => {
+  const userId = c.get("userId");
+  const incremental = c.req.query("mode") === "incremental";
+
+  const existing = activeSyncs.get(userId);
+  if (existing) {
+    return c.json({ status: "already-running" }, 409);
+  }
+
+  const start = Date.now();
+  emitSync(userId, {
+    phase: "starting",
+    collection: 0,
+    wantlist: 0,
+    total: null,
+    durationMs: null,
+    error: null,
+  });
+
+  const run = (async () => {
+    try {
+      const result = await syncDiscogsForUser(db, userId, {
+        incremental,
+        onProgress: (p) => {
+          emitSync(userId, {
+            phase: p.phase,
+            collection: p.collection,
+            wantlist: p.wantlist,
+            total: null,
+            durationMs: null,
+            error: null,
+          });
+        },
+      });
+      emitSync(userId, {
+        phase: "done",
+        collection: result.collection,
+        wantlist: result.wantlist,
+        total: result.collection + result.wantlist,
+        durationMs: result.durationMs,
+        error: null,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "sync failed";
+      console.error("[discogs] sync failed for", userId, err);
+      emitSync(userId, {
+        phase: "error",
+        collection: 0,
+        wantlist: 0,
+        total: null,
+        durationMs: Date.now() - start,
+        error: message,
+      });
+    } finally {
+      activeSyncs.delete(userId);
+    }
+  })();
+
+  activeSyncs.set(userId, run);
+
+  // Don't block the response on the full sync — the client tracks progress
+  // over the WS channel.
+  return c.json({ status: "started", incremental });
+});
+
+discogsRoute.get("/discogs/local-search", async (c) => {
+  const userId = c.get("userId");
+  const q = c.req.query("q")?.trim();
+  if (!q) return c.json({ error: "q is required" }, 400);
+  const scopeParam = c.req.query("scope") as LocalSearchScope | undefined;
+  const scope: LocalSearchScope =
+    scopeParam === "collection" || scopeParam === "wantlist" ? scopeParam : "any";
+  const limit = Math.min(Number(c.req.query("limit") ?? "10") || 10, 50);
+  const results = await searchLocalReleases(db, userId, q, { scope, limit });
+  return c.json({ results });
+});
+
+discogsRoute.get("/discogs/local/counts", async (c) => {
+  const userId = c.get("userId");
+  const rows = await db
+    .select({
+      type: discogsUserReleases.type,
+      count: sql<number>`count(*)::int`,
+    })
+    .from(discogsUserReleases)
+    .where(eq(discogsUserReleases.userId, userId))
+    .groupBy(discogsUserReleases.type);
+  const counts = { collection: 0, wantlist: 0 };
+  for (const row of rows) {
+    if (row.type === "collection") counts.collection = row.count;
+    if (row.type === "wantlist") counts.wantlist = row.count;
+  }
+  return c.json(counts);
+});
+
+discogsRoute.post("/discogs/auto-match", async (c) => {
+  const userId = c.get("userId");
+  const body = await c.req.json<{
+    trackId: string;
+    scope?: LocalSearchScope;
+    limit?: number;
+  }>();
+  const { trackId } = body;
+  if (!trackId) return c.json({ error: "trackId is required" }, 400);
+  if (!(await userOwnsTrack(userId, trackId))) {
+    return c.json({ error: "Track not found" }, 404);
+  }
+
+  const [track] = await db
+    .select({
+      title: tracks.title,
+      artist: tracks.artist,
+    })
+    .from(tracks)
+    .where(eq(tracks.id, trackId));
+  if (!track) return c.json({ error: "Track not found" }, 404);
+
+  const query = [track.artist, track.title]
+    .filter((v): v is string => !!v && v.trim().length > 0)
+    .join(" ")
+    .trim();
+  if (!query) return c.json({ matched: false, candidates: [] });
+
+  const scope = body.scope ?? "any";
+  const limit = Math.min(Math.max(body.limit ?? 5, 1), 25);
+  const candidates = await searchLocalReleases(db, userId, query, { scope, limit });
+
+  if (candidates.length === 0) {
+    return c.json({ matched: false, candidates: [] });
+  }
+
+  // "Exactly one hit" auto-match: a single candidate, OR a clearly dominant
+  // top hit (score gap of at least 0.2 between #1 and #2). We don't auto-apply
+  // weak matches.
+  const [top, second] = candidates;
+  const dominant =
+    candidates.length === 1 ||
+    (top !== undefined && second !== undefined && top.score - second.score >= 0.2);
+
+  if (!dominant || !top) {
+    return c.json({ matched: false, candidates });
+  }
+
+  try {
+    const release = await getRelease(top.releaseId);
+    if (!release) return c.json({ matched: false, candidates });
+    const metadata = releaseToMetadata(release);
+    await db
+      .update(tracks)
+      .set({
+        discogsReleaseId: metadata.releaseId,
+        discogsMetadata: metadata,
+      })
+      .where(eq(tracks.id, trackId));
+    return c.json({
+      matched: true,
+      releaseId: top.releaseId,
+      type: top.type,
+      metadata,
+      candidates,
+    });
   } catch (err) {
     const { status, body } = handleError(err);
     return c.json(body, status as 400 | 401 | 404 | 500 | 503);

@@ -199,14 +199,17 @@ CREATE INDEX ON discogs_user_releases USING gin (search_text gin_trgm_ops);
    once a day. Catches changes made directly on discogs.com.
 
 **Phasing:**
-1. Schema + migration + replace the existing `discogs_user_items` table
-2. `paginateUserList` + `syncCollection` + `syncWantlist`
-3. `POST /discogs/sync` route + progress events over the WS channel
+1. ✅ Schema + migration + replace the existing `discogs_user_items` table
+   (migration 0010, table `discogs_user_releases` with pg_trgm index)
+2. ✅ `paginateUserList` async generator + `syncDiscogsForUser` (full +
+   incremental modes, prunes deleted releases on full sync)
+3. ✅ `POST /discogs/sync` route + `discogs:sync` WS progress messages
 4. Sync button in Settings (manual trigger + progress UI)
-5. `local-search` route + a richer local search UI
+5. ✅ `GET /discogs/local-search` + `GET /discogs/local/counts` —
+   trigram-ranked local search. Library UI still TODO.
 6. App-foreground incremental sync
-7. Auto-match endpoint + post-download "in collection / wantlist / other"
-   prompt at ingest time
+7. ✅ `POST /discogs/auto-match` endpoint (auto-applies on dominant single hit,
+   otherwise returns candidates). Post-download UI prompt still TODO.
 
 ---
 
