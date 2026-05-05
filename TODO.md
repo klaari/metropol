@@ -63,20 +63,117 @@ auto-cue downbeatille, loop-pisteet, transition-efektit.
 
 ---
 
+## 🔜 Tehtävä: Discogs-mirror (paikallinen kokoelman + wantlistin synkka)
+
+**Prioriteetti:** Korkea
+**Kuvaus:**
+Sync collection + wantlist Discogsista paikalliseen Postgres-tauluun
+jotta voidaan tehdä nopeaa hakua, scope-pohjaista matchausta ja
+selausta ilman jatkuvaa Discogs API:n kuormittamista.
+
+**Miksi tämä ennen auto-matchausta tai selainta:**
+- Discogsin `database/search?q=...` palauttaa max 25 osumaa per kysely
+  ja perustuu sen omaan ranking-algoritmiin → "filter by `user_data`"
+  ei ole exhaustive (jos oikeaa releasea ei tule top-25:een, scope-haku
+  palauttaa tyhjän vaikka levy on collectionissa).
+- Discogsin verkkosivun "Export to CSV" -nappi EI ole API-rajapinnan
+  takana (lähettää sähköpostilinkin, ei triggeröitävissä).
+- Sen sijaan API tarjoaa saman datan paginoituna:
+  `GET /users/{u}/collection/folders/0/releases?per_page=100&page=N`
+  ja `GET /users/{u}/wants?per_page=100&page=N`.
+  `basic_information`-blokki sisältää valmiiksi artisti/title/label/
+  catno/year/format/thumb → ei tarvita per-release follow-up callejä.
+- Vrt. https://github.com/fscm/discogs2xlsx — sama lähestymistapa,
+  paginoi API:n läpi ja kirjoittaa xlsx:ään.
+
+**Aikamääre:** kair tilillä 6291 + 3055 = 9346 kohdetta → 94 requestiä
+(100/page) → ~95 sekuntia 60 req/min limitin alla. Kerran-jobi, ei
+request-handleri.
+
+**Skeema:** korvaa nykyinen `discogs_user_items`-taulu rikkaammalla
+versiolla (nykyinen on strict subset):
+
+```sql
+CREATE TABLE discogs_user_releases (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id         TEXT NOT NULL,
+  release_id      TEXT NOT NULL,
+  type            TEXT NOT NULL,         -- 'collection' | 'wantlist'
+  artist          TEXT,
+  title           TEXT,
+  label           TEXT,
+  catalog_number  TEXT,
+  year            INTEGER,
+  format          TEXT,
+  thumb_url       TEXT,
+  cover_url       TEXT,
+  folder_id       INTEGER,                -- collection only
+  instance_id     INTEGER,                -- collection only
+  notes           TEXT,                   -- wantlist note from Discogs
+  search_text     TEXT,                   -- "artist title label catno year"
+  raw             JSONB,                  -- koko Discogs-rivi tulevaa varten
+  synced_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE UNIQUE INDEX ON discogs_user_releases (user_id, release_id, type);
+CREATE INDEX ON discogs_user_releases (user_id, type);
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE INDEX ON discogs_user_releases USING gin (search_text gin_trgm_ops);
+```
+
+**API-pinta:**
+- `POST /discogs/sync` — täysi sync API:n kautta, idempotentti.
+  Palauttaa `{ collection: 6291, wantlist: 3055, durationMs }`.
+- `GET /discogs/local-search?q=...&scope=collection|wantlist|any&limit=10`
+  — trigram-rankattu paikallinen haku, sub-ms vasteaika.
+- `POST /discogs/auto-match` body `{ trackId, scope }` — käyttää
+  local-searchia; jos täsmälleen 1 osuma → enrich + palauta. Muutoin
+  palauta candidate-lista pikkupickeriä varten.
+
+**Lib-helperit** (`apps/api/src/lib/discogs.ts`):
+- `paginateUserList(endpoint, username)` async generator
+- `syncCollection(userId)` / `syncWantlist(userId)` consume the generator
+- 429-handlauttaminen: nuku `X-Discogs-Ratelimit-Remaining`-headerin
+  perusteella tai 60s 429:n jälkeen (ks. discogs2xlsx:n malli).
+
+**Sync-triggerit** (kasvavalla aggressiivisuudella):
+1. **App-foreground sync** — inkrementaali aina kun mobiili tulee
+   foregroundiin. Discogs sortaa `added desc` → lopeta paging kun
+   törmätään `date_added`-kenttään joka on jo paikallisesti → tyypillinen
+   inkrementaali = 1–2 requestiä.
+2. **Push-on-write** — kun appi itse mutatoi (POST/DELETE collection
+   tai wantlist), upsert paikallisesti samassa handlerissä. Nykyinen
+   `syncMembership` tekee tämän jo ohuesti — laajenna koko riville.
+3. **Nightly background full sync** — Railway cron osuu
+   `POST /discogs/sync` kerran päivässä. Kattaa muutokset jotka
+   tehtiin suoraan discogs.com:issa.
+
+**Vaiheistus:**
+1. Skeema + migraatio + nykyisen `discogs_user_items`-taulun korvaaminen
+2. `paginateUserList` + `syncCollection` + `syncWantlist`
+3. `POST /discogs/sync` route + progress event WS-kanavalla
+4. Sync-nappi Settings-näkymään (manuaalinen trigger + progress)
+5. `local-search` route + paikallinen rikkaampi search UI
+6. App-foreground inkrementaali
+7. Auto-match endpoint + ingest-pohjainen "tämä on collectionissa /
+   wantlistissa / muu" -pikkupromptti download-jälkeen
+
+---
+
 ## 🔜 Tehtävä: Discogs-rikastuksen jatko
 
 **Prioriteetti:** Keskitaso
+**Riippuvuudet:** Discogs-mirror (yllä) parantaa auto-matchin
+luotettavuutta merkittävästi.
 **Kuvaus:**
 Manuaalinen Discogs-rikastus toimitettu (search → match → enrich +
 collection/wantlist togglet + notes). Jäljellä:
 
-- Automaattinen ehdotus uusille kappaleille ingestin yhteydessä
-  (artist + title → Discogs search → jos selvä osuma niin auto-enrich,
-  muuten merkitään "tarkista")
 - Library-näkymässä badget collection/wantlist -tilasta (haku tracks-
-  taulun JOIN discogs_user_items kautta)
+  taulun JOIN discogs_user_releases kautta)
 - Library-haku huomioi Discogs-metadatan (label, catalog#, year, genre)
 - Cover-art player-näkymässä jos `discogsMetadata.coverUrl` löytyy
+- Auto-match ingestin yhteydessä — siirtyy mirror-taskiin (tarvitsee
+  paikallisen indeksin toimiakseen luotettavasti)
 
 ---
 
