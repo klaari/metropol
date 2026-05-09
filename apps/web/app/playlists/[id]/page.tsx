@@ -141,7 +141,7 @@ export default function PlaylistDetailPage({
     trackCount === 1 ? "1 track" : `${trackCount} tracks`;
 
   return (
-    <VStack gap="lg" pad="lg">
+    <VStack gap="lg" pad="lg" className="max-w-3xl w-full mx-auto">
       <HStack gap="md" align="center">
         <Link
           href="/playlists"

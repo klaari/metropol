@@ -72,7 +72,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <VStack gap="xl" pad="lg">
+    <VStack gap="xl" pad="lg" className="max-w-3xl w-full mx-auto">
       <VStack gap="xs">
         <Text variant="eyebrow" tone="muted">
           Configuration

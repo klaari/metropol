@@ -15,7 +15,7 @@ export default function LibraryPage() {
   const [sort, setSort] = useState<SortOption>("date");
 
   return (
-    <VStack gap="lg" pad="lg">
+    <VStack gap="lg" pad="lg" className="max-w-3xl w-full mx-auto">
       <VStack gap="xs">
         <Text variant="eyebrow" tone="muted">
           Your library

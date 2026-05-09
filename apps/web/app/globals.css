@@ -16,3 +16,15 @@ html, body {
 * {
   box-sizing: border-box;
 }
+
+/*
+ * Override max-w-3xl. Our editorial spacing scale defines `3xl` as 64px,
+ * and Tailwind 4 derives max-w-* from spacing — so max-w-3xl resolves to
+ * 64px instead of the standard 48rem (768px). We bring it back here so
+ * pages can use the canonical class for the comfortable column width.
+ */
+@layer utilities {
+  .max-w-3xl {
+    max-width: 48rem;
+  }
+}

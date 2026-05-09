@@ -73,7 +73,7 @@ export default function DownloadsPage() {
   const jobCountLabel = jobCount === 1 ? "1 job" : `${jobCount} jobs`;
 
   return (
-    <VStack gap="lg" pad="lg">
+    <VStack gap="lg" pad="lg" className="max-w-3xl w-full mx-auto">
       <VStack gap="xs">
         <Text variant="eyebrow" tone="muted">
           Queue
