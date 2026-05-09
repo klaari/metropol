@@ -1,6 +1,7 @@
 # Aani — Claude Code Context
 
 See AGENTS.md for universal implementation constraints.
+See ROADMAP.md for current phase, in-flight work, and deferred items.
 
 ## What This App Is
 A personal mobile music player with tempo/pitch control, live BPM display,
@@ -16,11 +17,13 @@ Named: Aani (domain: aani.cc).
 - **Storage:** Cloudflare R2 (S3-compatible, zero egress)
 - **Monorepo:** Turborepo
 - **Language:** TypeScript everywhere, strict mode enabled
-- **Runtime:** Bun (Phase 2+)
+- **Runtime:** Bun (server side)
 
 ## Monorepo Structure
-Turborepo workspace. Only `apps/mobile` ships today; `apps/api` and
-`apps/web` are reserved for Phase 2 and don't exist yet.
+Turborepo workspace. `apps/mobile` is the shipping product; `apps/api`
+(Bun + Hono) and `apps/web` (Next.js 15) are in active development.
+The structure tree below details `apps/mobile` only — see ROADMAP.md
+for the state of the other apps.
 
 ```
 aani/
@@ -109,12 +112,13 @@ not raw RN. Hex literals and px values live only in `design/`.
 ## Key Business Logic
 - Playback rate and pitch change together (no time-stretching) — simple rate adjustment
 - `currentBpm = originalBpm * playbackRate` — computed live, never stored
-- BPM entered manually by user in Phase 1 (auto-detection in Phase 2)
+- BPM is entered manually by the user (auto-detection is on the
+  roadmap — see ROADMAP.md)
 - Track files in R2 use two key patterns today:
   - YouTube downloads (global, deduped via `tracks.youtubeId`): `tracks/{trackId}.m4a`
   - Direct user uploads: `{userId}/{trackId}.{ext}`
   - Cookies: `cookies/{userId}/yt-cookies.txt`
-  - Planned (task #12): unified content-addressable path `tracks/{contentHash}.{ext}`
+  - A unified content-addressable path is planned — see ROADMAP.md
 - Playback position and rate persisted per track in `playback_state` table
 
 ## Deployment
@@ -125,28 +129,12 @@ not raw RN. Hex literals and px values live only in `design/`.
 | `apps/web` | Vercel | Next.js web companion; auto-deploys from `main` branch |
 | `apps/mobile` | EAS Build | Android APK via `eas build`; OTA updates via `eas update` |
 
-## Current Phase
-**Phase 1 — Core player. No backend server yet.**
-- Expo app + Clerk auth
-- Neon + Drizzle (direct connection from app)
-- Cloudflare R2 for audio file storage
-- File import from device
-- Playlist management
-- Player with rate control + BPM display
-
-## Phase 2 (do not implement yet)
-- Bun + Hono backend API on Railway
-- yt-dlp YouTube audio downloader
-- Automatic BPM detection on ingest
-
 ## What NOT to Do
-- Do not add a Hono/Bun backend — that is Phase 2
 - Do not use Supabase — we use Neon + Cloudflare R2
 - Do not use Firebase
 - Do not use class components
 - Do not use Redux or MobX
 - Do not use the Supabase client SDK anywhere
-- Do not implement YouTube downloading — Phase 2
 - Do not use expo-av for audio — use react-native-track-player only
 
 ## Environment Variables
