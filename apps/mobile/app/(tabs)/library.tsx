@@ -408,24 +408,27 @@ export default function LibraryScreen() {
   return (
     <Screen scroll={false} footer={footer}>
       <VStack flex gap="lg">
-        <HStack justify="between" align="center">
-          <VStack gap="xs">
-            <Text variant="titleLg">Library</Text>
-            {trackCount > 0 ? (
-              <Text variant="caption" tone="muted">
-                {trackCountLabel}
-              </Text>
+        <VStack gap="xs">
+          <Text variant="eyebrow" tone="muted">
+            Your library
+          </Text>
+          <HStack justify="between" align="center">
+            <Text variant="titleLg">
+              {trackCount > 0 ? trackCountLabel : "Library"}
+            </Text>
+            {trackList.length > 0 ? (
+              <Button
+                label={SORT_LABELS[sort]}
+                variant="secondary"
+                size="sm"
+                onPress={showSortPicker}
+                leading={
+                  <Ionicons name="swap-vertical" size={14} color={palette.ink} />
+                }
+              />
             ) : null}
-          </VStack>
-          <View>
-            <Button
-              label={SORT_LABELS[sort]}
-              variant="secondary"
-              size="sm"
-              onPress={showSortPicker}
-            />
-          </View>
-        </HStack>
+          </HStack>
+        </VStack>
 
         {trackList.length > 0 ? (
           <Input
@@ -445,7 +448,12 @@ export default function LibraryScreen() {
             <ActivityIndicator color={palette.ink} size="large" />
           </VStack>
         ) : trackList.length === 0 ? (
-          <VStack flex justify="center" align="center" gap="xs">
+          <VStack flex justify="center" align="center" gap="sm">
+            <Ionicons
+              name="musical-notes-outline"
+              size={48}
+              color={palette.inkFaint}
+            />
             <Text variant="title" align="center">
               No tracks yet
             </Text>
@@ -454,7 +462,12 @@ export default function LibraryScreen() {
             </Text>
           </VStack>
         ) : filteredTracks.length === 0 ? (
-          <VStack flex justify="center" align="center" gap="xs">
+          <VStack flex justify="center" align="center" gap="sm">
+            <Ionicons
+              name="search-outline"
+              size={40}
+              color={palette.inkFaint}
+            />
             <Text variant="title" align="center">
               No matches
             </Text>

@@ -118,11 +118,13 @@ export default function PlaylistDetailScreen() {
     );
   }
 
+  const trackCount = tracks.length;
+  const trackCountLabel = trackCount === 1 ? "1 track" : `${trackCount} tracks`;
+
   return (
     <Screen scroll={false}>
       <VStack flex gap="lg">
         <AppBar
-          title={editingName ? undefined : playlist.name}
           onBack={() => router.back()}
           trailing={
             <IconButton
@@ -150,9 +152,21 @@ export default function PlaylistDetailScreen() {
             <Button label="Save" onPress={saveRename} />
           </HStack>
         ) : (
-          <Pressable flat onPress={startRename}>
-            <Text variant="display">{playlist.name}</Text>
-          </Pressable>
+          <VStack gap="xs">
+            <Text variant="eyebrow" tone="muted">
+              Playlist
+            </Text>
+            <Pressable flat onPress={startRename}>
+              <Text variant="display" numberOfLines={2}>
+                {playlist.name}
+              </Text>
+            </Pressable>
+            {trackCount > 0 ? (
+              <Text variant="caption" tone="muted">
+                {trackCountLabel}
+              </Text>
+            ) : null}
+          </VStack>
         )}
 
         {loading ? (
@@ -160,12 +174,17 @@ export default function PlaylistDetailScreen() {
             <ActivityIndicator color={palette.ink} size="large" />
           </VStack>
         ) : tracks.length === 0 ? (
-          <VStack flex justify="center" align="center" gap="xs">
+          <VStack flex justify="center" align="center" gap="sm">
+            <Ionicons
+              name="musical-notes-outline"
+              size={48}
+              color={palette.inkFaint}
+            />
             <Text variant="title" align="center">
-              No tracks in this playlist
+              Nothing here yet
             </Text>
             <Text variant="body" tone="muted" align="center">
-              Tap add to add tracks
+              Tap + to add tracks from your library
             </Text>
           </VStack>
         ) : (

@@ -5,12 +5,15 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from "react-n
 import {
   Button,
   Field,
+  HeroSection,
   Input,
   Pressable,
   Screen,
+  Surface,
   Text,
   VStack,
   palette,
+  radius,
 } from "../../components/ui";
 
 export default function SignUpScreen() {
@@ -69,7 +72,7 @@ export default function SignUpScreen() {
     }
   }
 
-  const title = pendingVerification ? "Verify Email" : "Aani";
+  const title = pendingVerification ? "Verify email" : "Aani";
   const subtitle = pendingVerification
     ? `Enter the code sent to ${email}`
     : "Create your account";
@@ -80,81 +83,93 @@ export default function SignUpScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <VStack flex justify="center" gap="xl">
-          <VStack gap="xs" align="center">
-            <Text
-              variant={pendingVerification ? "titleLg" : "display"}
-              align="center"
-            >
-              {title}
-            </Text>
-            <Text variant="body" tone="muted" align="center">
-              {subtitle}
-            </Text>
-          </VStack>
+        <VStack flex justify="center" gap="lg">
+          <HeroSection
+            large={!pendingVerification}
+            visual={
+              <View
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: radius.full,
+                  backgroundColor: palette.ink,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text variant="titleLg" tone="inverse">
+                  {pendingVerification ? "✓" : "♫"}
+                </Text>
+              </View>
+            }
+            title={title}
+            subtitle={subtitle}
+          />
 
-          <VStack gap="md">
-            {error ? (
-              <Text variant="caption" tone="critical" align="center">
-                {error}
-              </Text>
-            ) : null}
+          <Surface tone="raised" rounded="lg" pad="lg" bordered>
+            <VStack gap="md">
+              {error ? (
+                <Text variant="caption" tone="critical" align="center">
+                  {error}
+                </Text>
+              ) : null}
 
-            {pendingVerification ? (
-              <Field label="Verification code">
-                <Input
-                  placeholder="Verification code"
-                  keyboardType="number-pad"
-                  autoComplete="one-time-code"
-                  value={code}
-                  onChangeText={setCode}
-                />
-              </Field>
-            ) : (
-              <>
-                <Field label="Email">
+              {pendingVerification ? (
+                <Field label="Verification code">
                   <Input
-                    placeholder="Email"
-                    autoCapitalize="none"
-                    autoComplete="email"
-                    keyboardType="email-address"
-                    value={email}
-                    onChangeText={setEmail}
+                    placeholder="123456"
+                    keyboardType="number-pad"
+                    autoComplete="one-time-code"
+                    value={code}
+                    onChangeText={setCode}
                   />
                 </Field>
+              ) : (
+                <>
+                  <Field label="Email">
+                    <Input
+                      placeholder="you@example.com"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                      keyboardType="email-address"
+                      value={email}
+                      onChangeText={setEmail}
+                    />
+                  </Field>
 
-                <Field label="Password">
-                  <Input
-                    variant="password"
-                    placeholder="Password"
-                    autoComplete="new-password"
-                    value={password}
-                    onChangeText={setPassword}
-                  />
-                </Field>
-              </>
-            )}
+                  <Field label="Password">
+                    <Input
+                      variant="password"
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      value={password}
+                      onChangeText={setPassword}
+                    />
+                  </Field>
+                </>
+              )}
 
-            <Button
-              label={
-                loading
-                  ? pendingVerification
-                    ? "Verifying"
-                    : "Creating"
-                  : pendingVerification
-                    ? "Verify"
-                    : "Sign Up"
-              }
-              onPress={pendingVerification ? handleVerify : handleSignUp}
-              disabled={loading}
-              block
-              leading={loading ? <ActivityIndicator color={palette.inkInverse} /> : null}
-            />
-          </VStack>
+              <Button
+                label={
+                  loading
+                    ? pendingVerification
+                      ? "Verifying"
+                      : "Creating"
+                    : pendingVerification
+                      ? "Verify"
+                      : "Sign Up"
+                }
+                onPress={pendingVerification ? handleVerify : handleSignUp}
+                disabled={loading}
+                block
+                leading={loading ? <ActivityIndicator color={palette.inkInverse} /> : null}
+              />
+            </VStack>
+          </Surface>
 
           {pendingVerification ? (
             <Pressable flat onPress={() => setPendingVerification(false)}>
-              <View style={{ alignItems: "center" }}>
+              <View style={{ alignItems: "center", paddingVertical: 12 }}>
                 <Text variant="body" tone="muted" align="center">
                   Back to sign up
                 </Text>
@@ -163,10 +178,10 @@ export default function SignUpScreen() {
           ) : (
             <Link href="/(auth)/sign-in" asChild>
               <Pressable flat>
-                <View style={{ alignItems: "center" }}>
+                <View style={{ alignItems: "center", paddingVertical: 12 }}>
                   <Text variant="body" tone="muted" align="center">
                     Already have an account?{" "}
-                    <Text variant="bodyStrong">Sign in</Text>
+                    <Text variant="bodyStrong" tone="primary">Sign in</Text>
                   </Text>
                 </View>
               </Pressable>

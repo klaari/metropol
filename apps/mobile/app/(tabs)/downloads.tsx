@@ -7,7 +7,6 @@ import { useEffect, useRef, useState } from "react";
 import { Alert, FlatList, View } from "react-native";
 import { DownloadJobItem } from "../../components/DownloadJobItem";
 import {
-  AppBar,
   Button,
   Divider,
   HStack,
@@ -189,60 +188,71 @@ export default function DownloadsScreen() {
     </Surface>
   );
 
+  const jobCount = recentJobs.length;
+  const jobCountLabel = jobCount === 1 ? "1 job" : `${jobCount} jobs`;
+
   return (
     <Screen scroll={false} footer={footer}>
       <VStack flex gap="lg">
-        <AppBar title="Downloads" />
+        <VStack gap="xs">
+          <Text variant="eyebrow" tone="muted">
+            Queue
+          </Text>
+          <Text variant="titleLg">
+            {jobCount > 0 ? jobCountLabel : "Downloads"}
+          </Text>
+        </VStack>
 
         {sessionExpired ? (
           <Pressable flat onPress={() => router.push("/(tabs)/settings")}>
             <Surface tone="raised" rounded="md" pad="md" bordered>
-              <HStack gap="sm">
+              <HStack gap="sm" align="center">
                 <Ionicons name="warning-outline" size={18} color={palette.warning} />
-                <Text variant="caption" tone="warning">
-                  YouTube cookies expired — tap to update in Settings
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <Text variant="caption" tone="warning">
+                    YouTube cookies expired — tap to update in Settings
+                  </Text>
+                </View>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={palette.warning}
+                />
               </HStack>
             </Surface>
           </Pressable>
         ) : null}
 
         {recentJobs.length > 0 ? (
-          <VStack flex gap="sm">
-            <Text variant="eyebrow" tone="muted">
-              Recent
-            </Text>
-            <FlatList
-              data={recentJobs}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <DownloadJobItem
-                  job={item}
-                  onRetry={() => handleRetry(item)}
-                  onDismiss={() => handleDismiss(item)}
-                />
-              )}
-              ItemSeparatorComponent={() => <Divider indent={64} inset="none" />}
-              showsVerticalScrollIndicator={false}
-            />
-          </VStack>
+          <FlatList
+            data={recentJobs}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <DownloadJobItem
+                job={item}
+                onRetry={() => handleRetry(item)}
+                onDismiss={() => handleDismiss(item)}
+              />
+            )}
+            ItemSeparatorComponent={() => <Divider indent={64} inset="none" />}
+            contentContainerStyle={{ paddingBottom: space.md }}
+            showsVerticalScrollIndicator={false}
+          />
         ) : (
           <VStack flex justify="center" align="center" gap="sm">
             <Ionicons
               name="cloud-download-outline"
-              size={40}
+              size={48}
               color={palette.inkFaint}
             />
-            <Text variant="bodyStrong" tone="muted">
+            <Text variant="title" align="center">
               No downloads yet
             </Text>
-            <Text variant="caption" tone="faint">
-              Tap Add URL to add a YouTube URL
+            <Text variant="body" tone="muted" align="center">
+              Tap Add URL to fetch a YouTube track
             </Text>
           </VStack>
         )}
-
-        <View style={{ height: space.md }} />
       </VStack>
     </Screen>
   );

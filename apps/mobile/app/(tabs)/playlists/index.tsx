@@ -21,6 +21,7 @@ import {
   Text,
   VStack,
   palette,
+  space,
 } from "../../../components/ui";
 import { usePlaylistsStore } from "../../../store/playlists";
 
@@ -95,20 +96,31 @@ export default function PlaylistsScreen() {
     }
   }
 
+  const playlistCount = playlists.length;
+  const playlistCountLabel =
+    playlistCount === 1 ? "1 playlist" : `${playlistCount} playlists`;
+
   return (
     <Screen scroll={false}>
       <VStack flex gap="lg">
-        <HStack justify="between">
-          <Text variant="titleLg">Playlists</Text>
-          <IconButton
-            icon={showCreate ? "close" : "add"}
-            accessibilityLabel={showCreate ? "Cancel playlist creation" : "Create playlist"}
-            onPress={() => {
-              setShowCreate((current) => !current);
-              setNewName("");
-            }}
-          />
-        </HStack>
+        <VStack gap="xs">
+          <Text variant="eyebrow" tone="muted">
+            Collections
+          </Text>
+          <HStack justify="between" align="center">
+            <Text variant="titleLg">
+              {playlistCount > 0 ? playlistCountLabel : "Playlists"}
+            </Text>
+            <IconButton
+              icon={showCreate ? "close" : "add"}
+              accessibilityLabel={showCreate ? "Cancel playlist creation" : "Create playlist"}
+              onPress={() => {
+                setShowCreate((current) => !current);
+                setNewName("");
+              }}
+            />
+          </HStack>
+        </VStack>
 
         {showCreate ? (
           <HStack gap="sm">
@@ -130,13 +142,13 @@ export default function PlaylistsScreen() {
             <ActivityIndicator color={palette.ink} size="large" />
           </VStack>
         ) : playlists.length === 0 ? (
-          <VStack flex justify="center" align="center" gap="xs">
-            <Ionicons name="list-outline" size={40} color={palette.inkFaint} />
+          <VStack flex justify="center" align="center" gap="sm">
+            <Ionicons name="albums-outline" size={48} color={palette.inkFaint} />
             <Text variant="title" align="center">
               No playlists yet
             </Text>
             <Text variant="body" tone="muted" align="center">
-              Tap add to create one
+              Tap + to create your first one
             </Text>
           </VStack>
         ) : (
@@ -149,11 +161,29 @@ export default function PlaylistsScreen() {
                 subtitle={`${item.trackCount} ${
                   item.trackCount === 1 ? "track" : "tracks"
                 }`}
+                leading={
+                  <View
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 8,
+                      backgroundColor: palette.paperSunken,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Ionicons
+                      name="musical-notes"
+                      size={18}
+                      color={palette.inkMuted}
+                    />
+                  </View>
+                }
                 trailing={
                   <Ionicons
                     name="chevron-forward"
                     size={20}
-                    color={palette.inkMuted}
+                    color={palette.inkFaint}
                   />
                 }
                 onPress={() => router.push(`/(tabs)/playlists/${item.id}`)}
@@ -161,6 +191,7 @@ export default function PlaylistsScreen() {
               />
             )}
             ItemSeparatorComponent={() => <Divider indent={64} inset="none" />}
+            contentContainerStyle={{ paddingBottom: space.xl }}
             showsVerticalScrollIndicator={false}
           />
         )}

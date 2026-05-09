@@ -5,12 +5,15 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, View } from "react-n
 import {
   Button,
   Field,
+  HeroSection,
   Input,
   Pressable,
   Screen,
+  Surface,
   Text,
   VStack,
   palette,
+  radius,
 } from "../../components/ui";
 
 export default function SignInScreen() {
@@ -60,59 +63,74 @@ export default function SignInScreen() {
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <VStack flex justify="center" gap="xl">
-          <VStack gap="xs" align="center">
-            <Text variant="display" align="center">
-              Aani
-            </Text>
-            <Text variant="body" tone="muted" align="center">
-              Sign in to continue
-            </Text>
-          </VStack>
+        <VStack flex justify="center" gap="lg">
+          <HeroSection
+            large
+            visual={
+              <View
+                style={{
+                  width: 72,
+                  height: 72,
+                  borderRadius: radius.full,
+                  backgroundColor: palette.ink,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text variant="titleLg" tone="inverse">
+                  ♫
+                </Text>
+              </View>
+            }
+            title="Aani"
+            subtitle="Sign in to continue"
+          />
 
-          <VStack gap="md">
-            {error ? (
-              <Text variant="caption" tone="critical" align="center">
-                {error}
-              </Text>
-            ) : null}
+          <Surface tone="raised" rounded="lg" pad="lg" bordered>
+            <VStack gap="md">
+              {error ? (
+                <Text variant="caption" tone="critical" align="center">
+                  {error}
+                </Text>
+              ) : null}
 
-            <Field label="Email">
-              <Input
-                placeholder="Email"
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
+              <Field label="Email">
+                <Input
+                  placeholder="you@example.com"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  keyboardType="email-address"
+                  value={email}
+                  onChangeText={setEmail}
+                />
+              </Field>
+
+              <Field label="Password">
+                <Input
+                  variant="password"
+                  placeholder="••••••••"
+                  autoComplete="password"
+                  value={password}
+                  onChangeText={setPassword}
+                />
+              </Field>
+
+              <Button
+                label={loading ? "Signing in" : "Sign In"}
+                onPress={handleSignIn}
+                disabled={loading}
+                block
+                leading={loading ? <ActivityIndicator color={palette.inkInverse} /> : null}
               />
-            </Field>
-
-            <Field label="Password">
-              <Input
-                variant="password"
-                placeholder="Password"
-                autoComplete="password"
-                value={password}
-                onChangeText={setPassword}
-              />
-            </Field>
-
-            <Button
-              label={loading ? "Signing in" : "Sign In"}
-              onPress={handleSignIn}
-              disabled={loading}
-              block
-              leading={loading ? <ActivityIndicator color={palette.inkInverse} /> : null}
-            />
-          </VStack>
+            </VStack>
+          </Surface>
 
           <Link href="/(auth)/sign-up" asChild>
             <Pressable flat>
-              <View style={{ alignItems: "center" }}>
+              <View style={{ alignItems: "center", paddingVertical: 12 }}>
                 <Text variant="body" tone="muted" align="center">
                   Don't have an account?{" "}
-                  <Text variant="bodyStrong">Sign up</Text>
+                  <Text variant="bodyStrong" tone="primary">Sign up</Text>
                 </Text>
               </View>
             </Pressable>

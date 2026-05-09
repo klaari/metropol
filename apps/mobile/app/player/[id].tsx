@@ -18,7 +18,6 @@ import PlaylistPickerSheet from "../../components/PlaylistPickerSheet";
 import {
   AppBar,
   Button,
-  Divider,
   HStack,
   IconButton,
   Input,
@@ -303,6 +302,15 @@ export default function PlayerScreen() {
       ? palette.critical
       : null;
 
+  const heroSize = 304;
+  const heroShadow = {
+    shadowColor: palette.ink,
+    shadowOpacity: 0.12,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 6,
+  } as const;
+
   return (
     <Screen>
       <VStack gap="xl">
@@ -317,66 +325,39 @@ export default function PlayerScreen() {
           }
         />
 
-        <HStack justify="center" gap="lg">
-          <View>
-            <IconButton
-              icon={discogsMeta ? "disc" : "disc-outline"}
-              accessibilityLabel="Open Discogs"
-              onPress={() => setDiscogsOpen(true)}
-            />
-            {discogsDot ? (
-              <View
-                style={{
-                  position: "absolute",
-                  top: space.xs,
-                  right: space.xs,
-                  width: space.sm,
-                  height: space.sm,
-                  borderRadius: radius.full,
-                  borderWidth: 1.5,
-                  borderColor: palette.paper,
-                  backgroundColor: discogsDot,
-                }}
-              />
-            ) : null}
-          </View>
-          <IconButton
-            icon="add-circle-outline"
-            accessibilityLabel="Add to playlist"
-            onPress={() => setPickerTrack({ id: currentTrack.id, title: currentTrack.title })}
-          />
-        </HStack>
-
         <VStack gap="lg" align="center">
           {discogsMeta?.coverUrl ? (
             <Image
               source={{ uri: discogsMeta.coverUrl }}
               resizeMode="cover"
               style={{
-                width: 240,
-                height: 240,
-                borderRadius: radius.lg,
+                width: heroSize,
+                height: heroSize,
+                borderRadius: radius.xl,
                 backgroundColor: palette.paperSunken,
+                ...heroShadow,
               }}
             />
           ) : (
-            <Surface tone="sunken" rounded="xl" pad="xl">
-              <View
-                style={{
-                  width: 176,
-                  height: 176,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text variant="display" tone="faint">
-                  ♫
-                </Text>
-              </View>
-            </Surface>
+            <View
+              style={{
+                width: heroSize,
+                height: heroSize,
+                borderRadius: radius.xl,
+                backgroundColor: palette.paperSunken,
+                alignItems: "center",
+                justifyContent: "center",
+                ...heroShadow,
+              }}
+            >
+              <Text variant="display" tone="faint">
+                ♫
+              </Text>
+            </View>
           )}
-          <VStack gap="xs" align="center">
-            <Text variant="display" align="center">
+
+          <VStack gap="xs" align="center" padX="base">
+            <Text variant="display" align="center" numberOfLines={2}>
               {currentTrack.title}
             </Text>
             {currentTrack.artist ? (
@@ -385,7 +366,7 @@ export default function PlayerScreen() {
               </Text>
             ) : null}
             {discogsMeta ? (
-              <Text variant="caption" tone="muted" align="center" numberOfLines={2}>
+              <Text variant="caption" tone="faint" align="center" numberOfLines={2}>
                 {[
                   discogsMeta.year ? String(discogsMeta.year) : null,
                   discogsMeta.label,
@@ -399,6 +380,36 @@ export default function PlayerScreen() {
               </Text>
             ) : null}
           </VStack>
+
+          <HStack justify="center" gap="lg">
+            <View>
+              <IconButton
+                icon={discogsMeta ? "disc" : "disc-outline"}
+                accessibilityLabel="Open Discogs"
+                onPress={() => setDiscogsOpen(true)}
+              />
+              {discogsDot ? (
+                <View
+                  style={{
+                    position: "absolute",
+                    top: space.xs,
+                    right: space.xs,
+                    width: space.sm,
+                    height: space.sm,
+                    borderRadius: radius.full,
+                    borderWidth: 1.5,
+                    borderColor: palette.paper,
+                    backgroundColor: discogsDot,
+                  }}
+                />
+              ) : null}
+            </View>
+            <IconButton
+              icon="add-circle-outline"
+              accessibilityLabel="Add to playlist"
+              onPress={() => setPickerTrack({ id: currentTrack.id, title: currentTrack.title })}
+            />
+          </HStack>
         </VStack>
 
         <VStack gap="xs">
@@ -457,88 +468,91 @@ export default function PlayerScreen() {
           </HStack>
         </VStack>
 
-        <HStack justify="center" gap="xl">
+        <HStack justify="center" align="center" gap="2xl">
           <IconButton
             icon="play-skip-back"
             accessibilityLabel="Previous track"
             onPress={() => getTrackPlayer()?.skipToPrevious().catch(() => {})}
-            size={36}
+            size={28}
           />
           <IconButton
             icon={playing ? "pause" : "play"}
             accessibilityLabel={playing ? "Pause" : "Play"}
             variant="filled"
             onPress={handleTogglePlayPause}
-            size={36}
+            size={32}
           />
           <IconButton
             icon="play-skip-forward"
             accessibilityLabel="Next track"
             onPress={() => getTrackPlayer()?.skipToNext().catch(() => {})}
-            size={36}
+            size={28}
           />
         </HStack>
 
-        <VStack gap="md" align="center">
-          <HStack gap="md">
-            <Text variant="eyebrow" tone="muted">
-              Speed
-            </Text>
-            {playbackRate !== 1 ? (
-              <Button
-                label="Reset"
-                size="sm"
-                variant="secondary"
-                onPress={() => userId && setRate(1.0, userId)}
-                leading={<Ionicons name="refresh" size={14} color={palette.ink} />}
-              />
-            ) : null}
-          </HStack>
-          <HStack gap="base">
-            <Button label="-0.5%" variant="secondary" onPress={() => adjustRate(-0.005)} />
-            <Text variant="title" numeric align="center">
+        <Surface tone="raised" rounded="lg" pad="lg" bordered>
+          <VStack gap="md">
+            <HStack justify="between" align="center">
+              <Text variant="eyebrow" tone="muted">
+                Tempo
+              </Text>
+              {playbackRate !== 1 ? (
+                <Button
+                  label="Reset"
+                  size="sm"
+                  variant="ghost"
+                  onPress={() => userId && setRate(1.0, userId)}
+                  leading={<Ionicons name="refresh" size={14} color={palette.ink} />}
+                />
+              ) : null}
+            </HStack>
+            <Text variant="display" numeric align="center">
               {rateDisplay}
             </Text>
-            <Button label="+0.5%" variant="secondary" onPress={() => adjustRate(0.005)} />
-          </HStack>
-        </VStack>
+            <HStack gap="md">
+              <View style={{ flex: 1 }}>
+                <Button label="−0.5%" variant="secondary" block onPress={() => adjustRate(-0.005)} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Button label="+0.5%" variant="secondary" block onPress={() => adjustRate(0.005)} />
+              </View>
+            </HStack>
+          </VStack>
+        </Surface>
 
-        <Surface tone="raised" rounded="lg" pad="base" bordered>
-          <Pressable flat onPress={startBpmEdit}>
-            <HStack justify="between">
-              <Text variant="body" tone="muted">
-                BPM
-              </Text>
-              <Text variant="title" numeric>
+        <Pressable flat onPress={startBpmEdit}>
+          <Surface tone="raised" rounded="lg" pad="lg" bordered>
+            <VStack gap="xs">
+              <HStack justify="between" align="center">
+                <Text variant="eyebrow" tone="muted">
+                  BPM
+                </Text>
+                <Ionicons name="create-outline" size={16} color={palette.inkMuted} />
+              </HStack>
+              <Text variant="display" numeric>
                 {currentBpm != null ? currentBpm.toFixed(1) : "—"}
               </Text>
-            </HStack>
-          </Pressable>
-          {playbackRate !== 1 && originalBpm != null ? (
-            <>
-              <Divider inset="md" />
-              <HStack justify="between">
+              {playbackRate !== 1 && originalBpm != null ? (
                 <Text variant="caption" tone="muted">
-                  Original
+                  Original {originalBpm}
                 </Text>
-                <Text variant="numeric" tone="muted">
-                  {originalBpm}
-                </Text>
-              </HStack>
-            </>
-          ) : null}
-        </Surface>
+              ) : null}
+            </VStack>
+          </Surface>
+        </Pressable>
 
-        <Surface tone="sunken" rounded="md" pad="sm">
-          <Text variant="caption" tone="warning">
-            {debugInfo || "(no load debug)"}
-          </Text>
-          {playDebug ? (
-            <Text variant="caption" tone="positive">
-              play: {playDebug}
+        {__DEV__ ? (
+          <Surface tone="sunken" rounded="md" pad="sm">
+            <Text variant="caption" tone="warning">
+              {debugInfo || "(no load debug)"}
             </Text>
-          ) : null}
-        </Surface>
+            {playDebug ? (
+              <Text variant="caption" tone="positive">
+                play: {playDebug}
+              </Text>
+            ) : null}
+          </Surface>
+        ) : null}
 
         <Modal
           visible={editingBpm}

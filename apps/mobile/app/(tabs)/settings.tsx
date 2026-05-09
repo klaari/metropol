@@ -13,10 +13,34 @@ import {
   Inline,
   PageSection,
   Screen,
+  Surface,
   Text,
   VStack,
   palette,
+  radius,
 } from "../../components/ui";
+import { View } from "react-native";
+
+function StatusDot({ tone }: { tone: "positive" | "warning" | "critical" | "muted" }) {
+  const color =
+    tone === "positive"
+      ? palette.positive
+      : tone === "warning"
+        ? palette.warning
+        : tone === "critical"
+          ? palette.critical
+          : palette.inkFaint;
+  return (
+    <View
+      style={{
+        width: 8,
+        height: 8,
+        borderRadius: radius.full,
+        backgroundColor: color,
+      }}
+    />
+  );
+}
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
@@ -258,151 +282,238 @@ export default function SettingsScreen() {
     return "muted" as const;
   };
 
+  const cookieDot: React.ReactNode =
+    cookieStatus === null ? (
+      <StatusDot tone="muted" />
+    ) : cookieStatus ? (
+      <StatusDot tone="positive" />
+    ) : (
+      <StatusDot tone="warning" />
+    );
+
+  const cookieStatusText =
+    cookieStatus === null
+      ? "Checking..."
+      : cookieStatus
+        ? "Cookies loaded"
+        : "No cookies — downloads may fail";
+
+  const cookieStatusTone =
+    cookieStatus === null
+      ? "muted"
+      : cookieStatus
+        ? "positive"
+        : "warning";
+
   return (
     <Screen>
       <VStack gap="xl">
-        <Text variant="titleLg">Settings</Text>
+        <VStack gap="xs">
+          <Text variant="eyebrow" tone="muted">
+            Configuration
+          </Text>
+          <Text variant="titleLg">Settings</Text>
+        </VStack>
 
         <PageSection eyebrow="YouTube" title="Cookies">
-          <ContentBlock>
-            <Text variant="body" tone="muted">
-          Upload a cookies.txt file from your browser to authenticate YouTube
-          downloads. Use a browser extension like "Get cookies.txt LOCALLY" to
-          export your YouTube cookies.
-            </Text>
+          <Surface tone="raised" rounded="lg" pad="lg" bordered>
+            <ContentBlock>
+              <Text variant="body" tone="muted">
+                Upload a cookies.txt file from your browser to authenticate
+                YouTube downloads. Use an extension like "Get cookies.txt
+                LOCALLY" to export them.
+              </Text>
 
-        <Inline>
-          <Text variant="body" tone="muted">Status</Text>
-          {cookieStatus === null ? (
-            <Text variant="caption" tone="muted" italic>Checking...</Text>
-          ) : cookieStatus ? (
-            <Text variant="bodyStrong" tone="positive">Cookies loaded</Text>
-          ) : (
-            <Text variant="bodyStrong" tone="warning">
-              No cookies — downloads may fail
-            </Text>
-          )}
-        </Inline>
+              <Inline>
+                <Text variant="body" tone="muted">Status</Text>
+                <HStack gap="sm" align="center">
+                  {cookieDot}
+                  <Text variant="bodyStrong" tone={cookieStatusTone}>
+                    {cookieStatusText}
+                  </Text>
+                </HStack>
+              </Inline>
 
-        <Button
-          label={uploading ? "Uploading" : "Upload cookies.txt"}
-          onPress={handleUploadCookies}
-          disabled={uploading}
-          leading={uploading ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
-        />
+              <Button
+                label={uploading ? "Uploading" : "Upload cookies.txt"}
+                onPress={handleUploadCookies}
+                disabled={uploading}
+                leading={
+                  uploading ? (
+                    <ActivityIndicator color={palette.inkInverse} size="small" />
+                  ) : null
+                }
+              />
 
-        {statusMessage && (
-          <Text variant="caption" tone={isError ? "critical" : "positive"} align="center">
-            {statusMessage}
-          </Text>
-        )}
-          </ContentBlock>
+              {statusMessage && (
+                <Text
+                  variant="caption"
+                  tone={isError ? "critical" : "positive"}
+                  align="center"
+                >
+                  {statusMessage}
+                </Text>
+              )}
+            </ContentBlock>
+          </Surface>
         </PageSection>
 
         <PageSection eyebrow="Storage" title="Local audio">
-          <ContentBlock>
-        <Text variant="body" tone="muted">
-          Tracks are downloaded to this device so playback starts instantly.
-          New tracks download in the background.
-        </Text>
-        <Inline>
-          <Text variant="body" tone="muted">Used</Text>
-          <Text variant="numeric" tone="positive">{formatBytes(cacheBytes)}</Text>
-        </Inline>
-        <HStack gap="md">
-        <Button
-          label={downloading ? "Downloading" : "Download all"}
-          size="sm"
-          onPress={handleDownloadAll}
-          disabled={downloading}
-          leading={downloading ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
-        />
-        <Button
-          label={clearing ? "Clearing" : "Clear cache"}
-          size="sm"
-          variant="destructive"
-          onPress={handleClearCache}
-          disabled={clearing}
-          leading={clearing ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
-        />
-        </HStack>
-          </ContentBlock>
+          <Surface tone="raised" rounded="lg" pad="lg" bordered>
+            <ContentBlock>
+              <Text variant="body" tone="muted">
+                Tracks download to this device so playback starts instantly.
+                New tracks download in the background.
+              </Text>
+              <Inline>
+                <Text variant="body" tone="muted">Used</Text>
+                <Text variant="bodyStrong" tone="primary">
+                  {formatBytes(cacheBytes)}
+                </Text>
+              </Inline>
+              <HStack gap="md">
+                <Button
+                  label={downloading ? "Downloading" : "Download all"}
+                  size="sm"
+                  onPress={handleDownloadAll}
+                  disabled={downloading}
+                  leading={
+                    downloading ? (
+                      <ActivityIndicator color={palette.inkInverse} size="small" />
+                    ) : null
+                  }
+                />
+                <Button
+                  label={clearing ? "Clearing" : "Clear cache"}
+                  size="sm"
+                  variant="destructive"
+                  onPress={handleClearCache}
+                  disabled={clearing}
+                  leading={
+                    clearing ? (
+                      <ActivityIndicator color={palette.inkInverse} size="small" />
+                    ) : null
+                  }
+                />
+              </HStack>
+            </ContentBlock>
+          </Surface>
         </PageSection>
 
         <PageSection eyebrow="Discogs" title="Sync">
-          <ContentBlock>
-        <Text variant="body" tone="muted">
-          Mirror your Discogs collection and wantlist locally so search and
-          auto-match are instant. Full sync rebuilds; quick sync only fetches
-          recent additions.
-        </Text>
-        <Inline align="start">
-          <Text variant="body" tone="muted">Local mirror</Text>
-          {discogsCountsLoading && !discogsCounts ? (
-            <Text variant="caption" tone="muted" italic>Checking...</Text>
-          ) : discogsCounts ? (
-            <Text variant="caption" tone="positive">
-              {discogsCounts.collection} collection · {discogsCounts.wantlist} wantlist
-            </Text>
-          ) : (
-            <Text variant="caption" tone="warning">Not synced yet</Text>
-          )}
-        </Inline>
-        <HStack gap="md">
-          <Button
-            label="Full sync"
-            size="sm"
-            onPress={() => handleDiscogsSync({ incremental: false })}
-            disabled={syncStarting || discogsStatus.state === "running"}
-            leading={syncStarting && discogsStatus.state !== "running" ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
-          />
-          <Button
-            label="Quick sync"
-            size="sm"
-            variant="secondary"
-            onPress={() => handleDiscogsSync({ incremental: true })}
-            disabled={syncStarting || discogsStatus.state === "running"}
-          />
-        </HStack>
-        {discogsStatusInfo && (
-          <Text
-            variant="caption"
-            tone={statusTone(discogsStatusInfo.tone)}
-            align="center"
-          >
-            {discogsStatusInfo.text}
-          </Text>
-        )}
-        {syncError && (
-          <Text variant="caption" tone="critical" align="center">{syncError}</Text>
-        )}
-          </ContentBlock>
+          <Surface tone="raised" rounded="lg" pad="lg" bordered>
+            <ContentBlock>
+              <Text variant="body" tone="muted">
+                Mirror your Discogs collection and wantlist locally so search
+                and auto-match are instant. Full sync rebuilds; quick sync only
+                fetches recent additions.
+              </Text>
+              <Inline align="start">
+                <Text variant="body" tone="muted">Local mirror</Text>
+                <HStack gap="sm" align="center">
+                  {discogsCountsLoading && !discogsCounts ? (
+                    <>
+                      <StatusDot tone="muted" />
+                      <Text variant="caption" tone="muted">Checking...</Text>
+                    </>
+                  ) : discogsCounts ? (
+                    <>
+                      <StatusDot tone="positive" />
+                      <Text variant="caption" tone="positive">
+                        {discogsCounts.collection} · {discogsCounts.wantlist}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <StatusDot tone="warning" />
+                      <Text variant="caption" tone="warning">Not synced</Text>
+                    </>
+                  )}
+                </HStack>
+              </Inline>
+              <HStack gap="md">
+                <Button
+                  label="Full sync"
+                  size="sm"
+                  onPress={() => handleDiscogsSync({ incremental: false })}
+                  disabled={syncStarting || discogsStatus.state === "running"}
+                  leading={
+                    syncStarting && discogsStatus.state !== "running" ? (
+                      <ActivityIndicator color={palette.inkInverse} size="small" />
+                    ) : null
+                  }
+                />
+                <Button
+                  label="Quick sync"
+                  size="sm"
+                  variant="secondary"
+                  onPress={() => handleDiscogsSync({ incremental: true })}
+                  disabled={syncStarting || discogsStatus.state === "running"}
+                />
+              </HStack>
+              {discogsStatusInfo && (
+                <Text
+                  variant="caption"
+                  tone={statusTone(discogsStatusInfo.tone)}
+                  align="center"
+                >
+                  {discogsStatusInfo.text}
+                </Text>
+              )}
+              {syncError && (
+                <Text variant="caption" tone="critical" align="center">
+                  {syncError}
+                </Text>
+              )}
+            </ContentBlock>
+          </Surface>
         </PageSection>
 
         <PageSection eyebrow="App" title="Version">
-          <ContentBlock>
-        <Text variant="numeric" tone="muted">
-          Update ID: {Updates.updateId ? Updates.updateId.slice(0, 8) : "embedded"}
-        </Text>
-        <Text variant="numeric" tone="muted">
-          Created: {Updates.createdAt ? Updates.createdAt.toISOString().slice(0, 19).replace("T", " ") : "—"}
-        </Text>
-        <Text variant="numeric" tone="muted">
-          Channel: {Updates.channel || "—"}
-        </Text>
-        <Button
-          label={checking ? "Checking" : "Check for updates"}
-          size="sm"
-          onPress={checkForUpdate}
-          disabled={checking}
-          leading={checking ? <ActivityIndicator color={palette.inkInverse} size="small" /> : null}
-        />
-        {updateMessage && (
-          <Text variant="caption" tone={updateError ? "critical" : "positive"} align="center">
-            {updateMessage}
-          </Text>
-        )}
-          </ContentBlock>
+          <Surface tone="raised" rounded="lg" pad="lg" bordered>
+            <ContentBlock>
+              <Inline>
+                <Text variant="body" tone="muted">Update</Text>
+                <Text variant="numeric" tone="primary">
+                  {Updates.updateId ? Updates.updateId.slice(0, 8) : "embedded"}
+                </Text>
+              </Inline>
+              <Inline>
+                <Text variant="body" tone="muted">Channel</Text>
+                <Text variant="numeric" tone="primary">
+                  {Updates.channel || "—"}
+                </Text>
+              </Inline>
+              <Inline>
+                <Text variant="body" tone="muted">Created</Text>
+                <Text variant="numeric" tone="primary">
+                  {Updates.createdAt
+                    ? Updates.createdAt.toISOString().slice(0, 10)
+                    : "—"}
+                </Text>
+              </Inline>
+              <Button
+                label={checking ? "Checking" : "Check for updates"}
+                size="sm"
+                onPress={checkForUpdate}
+                disabled={checking}
+                leading={
+                  checking ? (
+                    <ActivityIndicator color={palette.inkInverse} size="small" />
+                  ) : null
+                }
+              />
+              {updateMessage && (
+                <Text
+                  variant="caption"
+                  tone={updateError ? "critical" : "positive"}
+                  align="center"
+                >
+                  {updateMessage}
+                </Text>
+              )}
+            </ContentBlock>
+          </Surface>
         </PageSection>
 
         <PageSection>
