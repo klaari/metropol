@@ -38,6 +38,7 @@ export interface UserTrack {
   trackId: string;
   addedAt: Date;
   originalBpm: number | null;
+  beatOffset: number | null;
 }
 
 export interface UserTrackWithTrack extends UserTrack {
@@ -49,6 +50,7 @@ export interface LibraryTrack extends Track {
   userTrackId: string;
   addedAt: Date;
   originalBpm: number | null;
+  beatOffset: number | null;
   discogsReleaseId?: string | null;
   discogsCoverUrl?: string | null;
   discogsThumbUrl?: string | null;

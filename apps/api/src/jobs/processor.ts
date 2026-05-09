@@ -102,6 +102,7 @@ async function processJob(job: QueueJob) {
 
     let trackId: string;
     let originalBpm: number | null = null;
+    let beatOffset: number | null = null;
 
     if (dupe) {
       console.log(`[processor] contentHash dedup hit: ${contentHash} → reusing track ${dupe.id}`);
@@ -126,9 +127,11 @@ async function processJob(job: QueueJob) {
       fileKey = `tracks/${contentHash}.m4a`;
       await uploadToR2(fileKey, fileBuf, "audio/mp4");
 
-      originalBpm = await detectBpm(result.filePath);
-      if (originalBpm != null) {
-        console.log(`[processor] BPM detected for ${trackId}: ${originalBpm}`);
+      const bpmResult = await detectBpm(result.filePath);
+      if (bpmResult != null) {
+        originalBpm = bpmResult.bpm;
+        beatOffset = bpmResult.beatOffset;
+        console.log(`[processor] BPM detected for ${trackId}: ${originalBpm} (offset: ${beatOffset}s)`);
       }
 
       await db.insert(tracks).values({
@@ -149,7 +152,7 @@ async function processJob(job: QueueJob) {
     // Step 8: Link track to user
     await db
       .insert(userTracks)
-      .values({ userId, trackId, originalBpm })
+      .values({ userId, trackId, originalBpm, beatOffset })
       .onConflictDoNothing();
 
     // Step 9: Mark job completed

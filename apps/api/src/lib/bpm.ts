@@ -2,14 +2,29 @@ import { unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
+export interface BpmResult {
+  bpm: number;
+  /**
+   * Time of the first detected beat in seconds.
+   * Combined with bpm, this defines a full beat grid:
+   *   beat_n = beatOffset + n * (60 / bpm)
+   *
+   * Note: aubio's beat tracker reports the nearest tactus hit, not
+   * necessarily the musical downbeat. The offset gives you beat-level
+   * alignment; bar-level (downbeat) correction may need manual adjustment.
+   */
+  beatOffset: number;
+}
+
 /**
- * Detect the dominant BPM of an audio file.
+ * Detect the dominant BPM and first beat offset of an audio file.
  *
  * Pipeline:
  *   ffmpeg -i <file> -ac 1 -ar 22050 -f wav <tmpwav>
  *   aubiotrack <tmpwav>            -> beat times in seconds, one per line
  *   median(diff(times))            -> median inter-beat interval
  *   60 / median_interval           -> BPM
+ *   beats[0]                       -> beatOffset (first beat timestamp)
  *
  * Aubio is built against libsndfile, which doesn't decode AAC/M4A, so we
  * decode through ffmpeg first into a 22.05 kHz mono WAV — sufficient for
@@ -18,7 +33,7 @@ import { tmpdir } from "node:os";
  * Returns null when the file has fewer than 4 detected beats (too short or
  * arrhythmic) or any of the steps errors out.
  */
-export async function detectBpm(filePath: string): Promise<number | null> {
+export async function detectBpm(filePath: string): Promise<BpmResult | null> {
   const wavPath = join(tmpdir(), `aani-bpm-${process.pid}-${Date.now()}.wav`);
   try {
     const ff = Bun.spawn(
@@ -74,7 +89,13 @@ export async function detectBpm(filePath: string): Promise<number | null> {
     if (bpm < 95) bpm *= 2;
     if (bpm > 220) return null;
 
-    return Math.round(bpm * 10) / 10;
+    // beatOffset: first detected beat, adjusted for the same doubling.
+    // When we double BPM (half-time correction), the beat grid has twice
+    // as many beats — the offset stays the same since it's the first
+    // aubio hit, which is still a valid beat position.
+    const beatOffset = Math.round(beats[0]! * 1000) / 1000;
+
+    return { bpm: Math.round(bpm * 10) / 10, beatOffset };
   } catch (e) {
     console.warn(`[bpm] error: ${e instanceof Error ? e.message : String(e)}`);
     return null;

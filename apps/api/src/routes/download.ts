@@ -180,6 +180,7 @@ downloadRoute.get("/tracks", async (c) => {
     userTrackId: user_tracks.id,
     addedAt: user_tracks.addedAt,
     originalBpm: user_tracks.originalBpm,
+    beatOffset: user_tracks.beatOffset,
   }));
 
   return c.json(libraryTracks);
@@ -247,6 +248,7 @@ downloadRoute.post("/tracks/upload", async (c) => {
   const tmpPath = `/tmp/aani-upload-${trackId}.${format}`;
   let duration: number | null = null;
   let originalBpm: number | null = null;
+  let beatOffset: number | null = null;
   try {
     await Bun.write(tmpPath, buffer);
     const proc = Bun.spawn(
@@ -259,7 +261,11 @@ downloadRoute.post("/tracks/upload", async (c) => {
     if (parsed.format?.duration) {
       duration = Math.round(Number(parsed.format.duration));
     }
-    originalBpm = await detectBpm(tmpPath);
+    const bpmResult = await detectBpm(tmpPath);
+    if (bpmResult != null) {
+      originalBpm = bpmResult.bpm;
+      beatOffset = bpmResult.beatOffset;
+    }
   } catch {
     // duration / bpm stay null
   } finally {
@@ -287,7 +293,7 @@ downloadRoute.post("/tracks/upload", async (c) => {
 
   const [userTrack] = await db
     .insert(userTracks)
-    .values({ userId, trackId: track.id, originalBpm })
+    .values({ userId, trackId: track.id, originalBpm, beatOffset })
     .returning();
 
   return c.json(
@@ -296,6 +302,7 @@ downloadRoute.post("/tracks/upload", async (c) => {
       userTrackId: userTrack.id,
       addedAt: userTrack.addedAt,
       originalBpm: userTrack.originalBpm,
+      beatOffset: userTrack.beatOffset,
     },
     201,
   );
