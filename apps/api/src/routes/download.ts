@@ -334,3 +334,35 @@ downloadRoute.get("/tracks/discover", async (_c) => {
   // Stub: future Discover feature — returns recent global tracks not in user's library
   return _c.json([]);
 });
+
+// Rename a track (updates title on the global tracks table)
+downloadRoute.patch("/tracks/:id", async (c) => {
+  const userId = c.get("userId");
+  const trackId = c.req.param("id");
+  const { title } = await c.req.json<{ title?: string }>();
+
+  if (!title?.trim()) return c.json({ error: "title is required" }, 400);
+
+  // Verify ownership via userTracks
+  const [row] = await db
+    .select({ trackId: userTracks.trackId })
+    .from(userTracks)
+    .where(and(eq(userTracks.userId, userId), eq(userTracks.trackId, trackId)));
+
+  if (!row) return c.json({ error: "Track not found" }, 404);
+
+  await db.update(tracks).set({ title: title.trim() }).where(eq(tracks.id, trackId));
+  return c.json({ ok: true });
+});
+
+// Remove a track from user's library (deletes userTrack row)
+downloadRoute.delete("/tracks/:id", async (c) => {
+  const userId = c.get("userId");
+  const trackId = c.req.param("id");
+
+  await db
+    .delete(userTracks)
+    .where(and(eq(userTracks.userId, userId), eq(userTracks.trackId, trackId)));
+
+  return c.json({ ok: true });
+});
