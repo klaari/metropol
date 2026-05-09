@@ -268,6 +268,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
   togglePlayPause: async () => {
     const tp = getTrackPlayer();
     if (!tp) return;
+    await setupPlayer();
     const { playing } = get();
     if (playing) {
       set({ playing: false });
@@ -301,6 +302,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
     const tp = getTrackPlayer();
     if (!tp) return;
+    await setupPlayer();
 
     const startTrack = queue[idx]!;
     const rntpStart = await buildRntpTrack(startTrack.track);
@@ -315,9 +317,15 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
       suppressActiveTrackChanged = false;
       suppressionSafetyTimer = null;
     }, SUPPRESSION_SAFETY_MS);
-    await tp.reset();
-    await tp.add(rntpStart);
-    void tp.play();
+    try {
+      await tp.reset();
+      await tp.add(rntpStart);
+      await tp.play();
+    } catch (e: any) {
+      console.warn("[player.playWithQueue] hot path:", e?.message ?? e);
+      set({ playing: false });
+      return;
+    }
 
     // Apply the user's saved rate for this track in parallel.
     void getDb()
@@ -428,11 +436,13 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     });
 
     if (tp) {
+      await setupPlayer();
       try {
         await tp.skip(index);
-        void tp.play();
+        await tp.play();
       } catch (e: any) {
         console.warn("[player.skipToIndex]", e?.message ?? e);
+        set({ playing: false });
       }
     }
     schedulePersist(userId);
