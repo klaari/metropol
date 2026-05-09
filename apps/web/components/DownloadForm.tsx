@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import type { DownloadJob } from "@aani/types";
+import { Button, HStack, Input, Text, VStack } from "./ui";
 
 const YOUTUBE_URL_REGEX =
   /^https?:\/\/(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\//;
@@ -27,7 +28,7 @@ export default function DownloadForm({ onJobCreated }: Props) {
         setUrl((prev) => (prev ? prev : text));
       }
     } catch {
-      // clipboard read not permitted — silently skip
+      /* clipboard read not permitted — silently skip */
     }
   };
 
@@ -36,9 +37,7 @@ export default function DownloadForm({ onJobCreated }: Props) {
   }, []);
 
   const handleFocus = () => {
-    if (!url) {
-      tryPrefillFromClipboard();
-    }
+    if (!url) tryPrefillFromClipboard();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -64,7 +63,9 @@ export default function DownloadForm({ onJobCreated }: Props) {
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error ?? `Server error ${res.status}`);
+        throw new Error(
+          (body as { error?: string }).error ?? `Server error ${res.status}`,
+        );
       }
 
       const job = (await res.json()) as DownloadJob;
@@ -78,27 +79,32 @@ export default function DownloadForm({ onJobCreated }: Props) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="flex gap-2">
-        <input
-          ref={inputRef}
-          type="url"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onFocus={handleFocus}
-          placeholder="Paste a YouTube URL..."
-          className="flex-1 bg-zinc-900 border border-zinc-700 rounded-lg px-4 py-2.5 text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 text-sm"
-          disabled={loading}
-        />
-        <button
-          type="submit"
-          disabled={loading || !url}
-          className="bg-white text-black font-medium text-sm px-5 py-2.5 rounded-lg disabled:opacity-40 hover:bg-zinc-100 transition-colors"
-        >
-          {loading ? "Adding…" : "Add"}
-        </button>
-      </div>
-      {error && <p className="text-red-400 text-sm">{error}</p>}
+    <form onSubmit={handleSubmit}>
+      <VStack gap="sm">
+        <HStack gap="sm">
+          <div className="flex-1">
+            <Input
+              ref={inputRef}
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onFocus={handleFocus}
+              placeholder="Paste a YouTube URL..."
+              disabled={loading}
+            />
+          </div>
+          <Button
+            label={loading ? "Adding…" : "Add"}
+            type="submit"
+            disabled={loading || !url}
+          />
+        </HStack>
+        {error ? (
+          <Text variant="caption" tone="critical">
+            {error}
+          </Text>
+        ) : null}
+      </VStack>
     </form>
   );
 }

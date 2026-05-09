@@ -2,6 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAuth, useClerk, useUser } from "@clerk/nextjs";
+import {
+  Button,
+  HStack,
+  Inline,
+  PageSection,
+  StatusDot,
+  Surface,
+  Text,
+  VStack,
+} from "@/components/ui";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -62,82 +72,121 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="px-4 py-6 space-y-6 max-w-lg">
-      <h1 className="text-3xl font-bold text-white">Settings</h1>
+    <VStack gap="xl" pad="lg">
+      <VStack gap="xs">
+        <Text variant="eyebrow" tone="muted">
+          Configuration
+        </Text>
+        <Text variant="titleLg">Settings</Text>
+      </VStack>
 
-      {/* Account */}
-      {user && (
-        <section>
-          <p className="text-xs font-semibold text-zinc-600 uppercase tracking-widest mb-2 px-1">Account</p>
-          <div className="rounded-2xl bg-zinc-950 divide-y divide-zinc-900 overflow-hidden">
-            <div className="flex items-center gap-3 px-4 py-3.5">
-              {user.imageUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={user.imageUrl} alt="" className="w-9 h-9 rounded-full" />
-              )}
+      {user ? (
+        <PageSection eyebrow="Account">
+          <Surface tone="raised" rounded="lg" pad="none" bordered>
+            <HStack gap="md" pad="base" className="border-b border-paper-edge">
+              {user.imageUrl ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img
+                  src={user.imageUrl}
+                  alt=""
+                  className="w-10 h-10 rounded-full"
+                />
+              ) : null}
               <div className="min-w-0">
-                <p className="text-white text-sm font-medium truncate">{user.fullName ?? user.username}</p>
-                <p className="text-zinc-500 text-xs truncate">{user.primaryEmailAddress?.emailAddress}</p>
+                <Text variant="bodyStrong" numberOfLines={1}>
+                  {user.fullName ?? user.username ?? "Account"}
+                </Text>
+                <Text variant="caption" tone="muted" numberOfLines={1}>
+                  {user.primaryEmailAddress?.emailAddress}
+                </Text>
               </div>
-            </div>
+            </HStack>
             <button
               onClick={() => signOut()}
-              className="w-full text-left px-4 py-3.5 text-red-500 text-sm font-medium hover:bg-zinc-900 transition-colors"
+              className="w-full text-left px-base py-md hover:bg-paper-sunken transition-colors"
             >
-              Sign out
+              <Text variant="bodyStrong" tone="critical">
+                Sign out
+              </Text>
             </button>
-          </div>
-        </section>
-      )}
+          </Surface>
+        </PageSection>
+      ) : null}
 
-      {/* YouTube */}
-      <section>
-        <p className="text-xs font-semibold text-zinc-600 uppercase tracking-widest mb-2 px-1">YouTube</p>
-        <div className="rounded-2xl bg-zinc-950 divide-y divide-zinc-900 overflow-hidden">
+      <PageSection eyebrow="YouTube" title="Cookies">
+        <Surface tone="raised" rounded="lg" pad="lg" bordered>
+          <VStack gap="base">
+            <Text variant="body" tone="muted">
+              Upload a cookies.txt file from your browser to authenticate
+              YouTube downloads. Use a browser extension like &ldquo;Get
+              cookies.txt LOCALLY&rdquo; to export them.
+            </Text>
 
-          {/* Status row */}
-          <div className="flex items-center justify-between px-4 py-3.5">
-            <span className="text-white text-sm">Cookie status</span>
-            {cookieStatus === null ? (
-              <span className="text-zinc-600 text-sm">Checking…</span>
-            ) : cookieStatus ? (
-              <span className="text-green-400 text-sm font-medium">Active ✓</span>
-            ) : (
-              <span className="text-[#f5a623] text-sm font-medium">Not loaded</span>
-            )}
-          </div>
+            <Inline>
+              <Text variant="body" tone="muted">
+                Status
+              </Text>
+              <HStack gap="sm" align="center">
+                {cookieStatus === null ? (
+                  <>
+                    <StatusDot tone="muted" />
+                    <Text variant="bodyStrong" tone="muted">
+                      Checking…
+                    </Text>
+                  </>
+                ) : cookieStatus ? (
+                  <>
+                    <StatusDot tone="positive" />
+                    <Text variant="bodyStrong" tone="positive">
+                      Cookies loaded
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <StatusDot tone="warning" />
+                    <Text variant="bodyStrong" tone="warning">
+                      Not loaded
+                    </Text>
+                  </>
+                )}
+              </HStack>
+            </Inline>
 
-          {/* Upload row */}
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploading}
-            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-900 transition-colors disabled:opacity-50"
-          >
-            <span className="text-white text-sm">
-              {uploading ? "Uploading…" : "Upload cookies.txt"}
-            </span>
-            <span className="text-zinc-600 text-sm">›</span>
-          </button>
+            <Button
+              label={uploading ? "Uploading…" : "Upload cookies.txt"}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            />
 
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".txt,text/plain"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadFile(f); }}
-          />
-        </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".txt,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadFile(f);
+              }}
+            />
 
-        {statusMessage && (
-          <p className={`text-xs mt-2 px-1 ${isError ? "text-red-400" : "text-green-400"}`}>
-            {statusMessage}
-          </p>
-        )}
+            {statusMessage ? (
+              <Text
+                variant="caption"
+                tone={isError ? "critical" : "positive"}
+              >
+                {statusMessage}
+              </Text>
+            ) : null}
 
-        <p className="text-xs text-zinc-700 mt-2 px-1 leading-relaxed">
-          Needed to download YouTube content. Export from your browser using "Get cookies.txt LOCALLY" (Chrome) or Cookie Quick Manager (Firefox). Use an incognito window for longer-lasting cookies.
-        </p>
-      </section>
-    </div>
+            <Text variant="caption" tone="faint">
+              Needed to download YouTube content. Export from your browser
+              using &ldquo;Get cookies.txt LOCALLY&rdquo; (Chrome) or Cookie
+              Quick Manager (Firefox). Use an incognito window for
+              longer-lasting cookies.
+            </Text>
+          </VStack>
+        </Surface>
+      </PageSection>
+    </VStack>
   );
 }

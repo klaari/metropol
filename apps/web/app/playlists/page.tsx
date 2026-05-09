@@ -1,8 +1,17 @@
 "use client";
 
 import { useAuth } from "@clerk/nextjs";
-import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+  Button,
+  HStack,
+  IconButton,
+  Input,
+  ListRow,
+  Text,
+  VStack,
+  palette,
+} from "@/components/ui";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -27,7 +36,9 @@ export default function PlaylistsPage() {
   async function fetchPlaylists() {
     try {
       const token = await getToken();
-      const res = await fetch(`${API_URL}/playlists`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/playlists`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
       if (res.ok) setPlaylists(await res.json());
     } finally {
       setLoading(false);
@@ -60,74 +71,104 @@ export default function PlaylistsPage() {
   async function handleDelete(id: string, name: string) {
     if (!confirm(`Delete "${name}"?`)) return;
     const token = await getToken();
-    await fetch(`${API_URL}/playlists/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    await fetch(`${API_URL}/playlists/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
     setPlaylists((prev) => prev.filter((p) => p.id !== id));
   }
 
-  return (
-    <div className="px-4 py-6">
-      <div className="flex items-end justify-between mb-5">
-        <h1 className="text-3xl font-bold text-white">Playlists</h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="w-9 h-9 rounded-full bg-white text-black text-xl font-light flex items-center justify-center hover:bg-zinc-100 transition-colors"
-        >
-          +
-        </button>
-      </div>
+  const playlistCount = playlists.length;
+  const playlistCountLabel =
+    playlistCount === 1 ? "1 playlist" : `${playlistCount} playlists`;
 
-      {/* Create form */}
+  return (
+    <VStack gap="lg" pad="lg">
+      <VStack gap="xs">
+        <Text variant="eyebrow" tone="muted">
+          Collections
+        </Text>
+        <HStack justify="between" align="center">
+          <Text variant="titleLg">
+            {playlistCount > 0 ? playlistCountLabel : "Playlists"}
+          </Text>
+          <IconButton
+            aria-label={showCreate ? "Cancel" : "Create playlist"}
+            onClick={() => {
+              setShowCreate((cur) => !cur);
+              setNewName("");
+            }}
+          >
+            <span className="text-body-lg leading-none">
+              {showCreate ? "✕" : "＋"}
+            </span>
+          </IconButton>
+        </HStack>
+      </VStack>
+
       {showCreate && (
-        <form onSubmit={handleCreate} className="flex items-center gap-2 mb-4">
-          <input
-            autoFocus
-            type="text"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            placeholder="Playlist name"
-            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2.5 text-white placeholder-zinc-600 text-sm focus:outline-none focus:border-zinc-600"
-          />
-          <button
-            type="submit"
-            disabled={creating || !newName.trim()}
-            className="bg-white text-black text-sm font-semibold px-4 py-2.5 rounded-xl disabled:opacity-40 hover:bg-zinc-100 transition-colors"
-          >
-            {creating ? "…" : "Create"}
-          </button>
-          <button
-            type="button"
-            onClick={() => { setShowCreate(false); setNewName(""); }}
-            className="text-zinc-500 text-sm px-2 py-2.5 hover:text-zinc-300 transition-colors"
-          >
-            Cancel
-          </button>
+        <form onSubmit={handleCreate}>
+          <HStack gap="sm">
+            <div className="flex-1">
+              <Input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder="Playlist name"
+              />
+            </div>
+            <Button
+              label={creating ? "…" : "Create"}
+              type="submit"
+              disabled={creating || !newName.trim()}
+            />
+          </HStack>
         </form>
       )}
 
       {loading ? (
-        <p className="text-zinc-500 text-sm py-12 text-center">Loading…</p>
+        <Text variant="caption" tone="muted" align="center" className="py-2xl">
+          Loading…
+        </Text>
       ) : playlists.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-2">
-          <p className="text-white text-lg font-medium">No playlists yet</p>
-          <p className="text-zinc-600 text-sm">Tap + to create one</p>
-        </div>
+        <VStack gap="xs" align="center" padY="3xl">
+          <Text variant="title" align="center">
+            No playlists yet
+          </Text>
+          <Text variant="body" tone="muted" align="center">
+            Tap + to create your first one
+          </Text>
+        </VStack>
       ) : (
-        <ul className="divide-y divide-zinc-900">
+        <ul className="divide-y divide-paper-edge -mx-lg">
           {playlists.map((p) => (
             <li key={p.id} className="flex items-center group">
-              <Link
-                href={`/playlists/${p.id}`}
-                className="flex-1 flex items-center justify-between py-4 hover:opacity-80 transition-opacity"
-              >
-                <span className="text-white text-base font-medium">{p.name}</span>
-                <span className="text-zinc-500 text-sm mr-3">
-                  {p.trackCount} {p.trackCount === 1 ? "track" : "tracks"}
-                </span>
-              </Link>
+              <div className="flex-1 min-w-0">
+                <ListRow
+                  href={`/playlists/${p.id}`}
+                  title={p.name}
+                  subtitle={`${p.trackCount} ${
+                    p.trackCount === 1 ? "track" : "tracks"
+                  }`}
+                  leading={
+                    <div className="w-10 h-10 rounded-md bg-paper-sunken flex items-center justify-center">
+                      <span className="text-ink-muted">♫</span>
+                    </div>
+                  }
+                  trailing={
+                    <span
+                      className="text-ink-faint"
+                      style={{ color: palette.inkFaint }}
+                    >
+                      ›
+                    </span>
+                  }
+                />
+              </div>
               <button
                 onClick={() => handleDelete(p.id, p.name)}
-                className="text-zinc-700 hover:text-red-500 transition-colors p-1 opacity-0 group-hover:opacity-100"
-                title="Delete"
+                aria-label={`Delete ${p.name}`}
+                className="px-md text-ink-faint hover:text-critical opacity-0 group-hover:opacity-100 transition-colors"
               >
                 ✕
               </button>
@@ -135,6 +176,6 @@ export default function PlaylistsPage() {
           ))}
         </ul>
       )}
-    </div>
+    </VStack>
   );
 }

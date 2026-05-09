@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
+import { Text, VStack } from "./ui";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3000";
 
@@ -60,14 +61,14 @@ export default function UploadForm({ onUploaded }: { onUploaded: () => void }) {
   }
 
   return (
-    <div className="space-y-2">
+    <VStack gap="sm">
       <div
-        className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+        className={`border-thick border-dashed rounded-lg p-lg text-center transition-colors ${
           uploading
-            ? "border-zinc-700 bg-zinc-900 cursor-wait opacity-60"
+            ? "border-paper-edge bg-paper-sunken cursor-wait opacity-60"
             : isDragging
-              ? "border-zinc-400 bg-zinc-800 cursor-copy"
-              : "border-zinc-700 hover:border-zinc-500 bg-zinc-900 cursor-pointer"
+              ? "border-ink bg-paper-raised cursor-copy"
+              : "border-paper-edge hover:border-ink-muted bg-paper-raised cursor-pointer"
         }`}
         onClick={() => !uploading && fileInputRef.current?.click()}
         onDragOver={(e) => {
@@ -77,16 +78,16 @@ export default function UploadForm({ onUploaded }: { onUploaded: () => void }) {
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
       >
-        <p className="text-zinc-400 text-sm">
+        <Text variant="body" tone="muted">
           {uploading ? (
             "Uploading…"
           ) : (
             <>
               Drop an audio file here or{" "}
-              <span className="text-white underline">click to browse</span>
+              <span className="text-ink underline">click to browse</span>
             </>
           )}
-        </p>
+        </Text>
         <input
           ref={fileInputRef}
           type="file"
@@ -97,11 +98,11 @@ export default function UploadForm({ onUploaded }: { onUploaded: () => void }) {
         />
       </div>
 
-      {status && (
-        <p className={`text-sm ${isError ? "text-red-400" : "text-green-400"}`}>
+      {status ? (
+        <Text variant="caption" tone={isError ? "critical" : "positive"}>
           {status}
-        </p>
-      )}
-    </div>
+        </Text>
+      ) : null}
+    </VStack>
   );
 }
