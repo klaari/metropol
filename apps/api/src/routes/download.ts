@@ -342,23 +342,33 @@ downloadRoute.get("/tracks/discover", async (_c) => {
   return _c.json([]);
 });
 
-// Rename a track (updates title on the global tracks table)
+// Update track metadata — title (global) or beatOffset/originalBpm (per-user)
 downloadRoute.patch("/tracks/:id", async (c) => {
   const userId = c.get("userId");
   const trackId = c.req.param("id");
-  const { title } = await c.req.json<{ title?: string }>();
+  const body = await c.req.json<{ title?: string; beatOffset?: number | null; originalBpm?: number | null }>();
 
-  if (!title?.trim()) return c.json({ error: "title is required" }, 400);
-
-  // Verify ownership via userTracks
+  // Verify ownership
   const [row] = await db
-    .select({ trackId: userTracks.trackId })
+    .select({ id: userTracks.id })
     .from(userTracks)
     .where(and(eq(userTracks.userId, userId), eq(userTracks.trackId, trackId)));
 
   if (!row) return c.json({ error: "Track not found" }, 404);
 
-  await db.update(tracks).set({ title: title.trim() }).where(eq(tracks.id, trackId));
+  // title is global (shared across users for deduped tracks)
+  if (body.title?.trim()) {
+    await db.update(tracks).set({ title: body.title.trim() }).where(eq(tracks.id, trackId));
+  }
+
+  // beatOffset and originalBpm are per-user overrides
+  const userUpdate: Record<string, unknown> = {};
+  if ("beatOffset" in body) userUpdate.beatOffset = body.beatOffset ?? null;
+  if ("originalBpm" in body) userUpdate.originalBpm = body.originalBpm ?? null;
+  if (Object.keys(userUpdate).length > 0) {
+    await db.update(userTracks).set(userUpdate).where(and(eq(userTracks.userId, userId), eq(userTracks.trackId, trackId)));
+  }
+
   return c.json({ ok: true });
 });
 

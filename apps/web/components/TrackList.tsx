@@ -337,15 +337,37 @@ function TrackRow({
   track,
   getToken,
   onLongPress,
+  onBeatOffsetChange,
 }: {
   track: LibraryTrack;
   getToken: () => Promise<string | null>;
   onLongPress: () => void;
+  onBeatOffsetChange: (trackId: string, beatOffset: number) => void;
 }) {
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [beatOffset, setBeatOffset] = useState<number | null>(track.beatOffset ?? null);
+  const [savingOffset, setSavingOffset] = useState(false);
+
+  const beatInterval = track.originalBpm ? 60 / track.originalBpm : null;
+
+  const shiftBeat = async (direction: -1 | 1) => {
+    if (beatInterval == null || beatOffset == null) return;
+    const newOffset = Math.max(0, Math.round((beatOffset + direction * beatInterval) * 1000) / 1000);
+    setBeatOffset(newOffset);
+    setSavingOffset(true);
+    try {
+      const token = await getToken();
+      await fetch(`${API_URL}/tracks/${track.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ beatOffset: newOffset }),
+      });
+      onBeatOffsetChange(track.id, newOffset);
+    } finally { setSavingOffset(false); }
+  };
 
   const handlePlay = async () => {
     if (streamUrl) {
@@ -422,7 +444,7 @@ function TrackRow({
       </div>
 
       {streamUrl ? (
-        <div className="pb-xs">
+        <div className="pb-xs space-y-xs">
           <audio
             ref={audioRef}
             src={streamUrl}
@@ -431,6 +453,40 @@ function TrackRow({
             className="w-full h-9"
             style={{ accentColor: palette.ink }}
           />
+
+          {/* Beat grid controls — only shown when BPM is known */}
+          {track.originalBpm != null && (
+            <div className="flex items-center gap-sm px-sm py-xs bg-paper-sunken rounded-md">
+              <div className="flex-1 min-w-0">
+                <p className="text-ink-muted text-caption font-medium">Beat grid</p>
+                <p className="text-ink-faint text-caption tabular-nums">
+                  {beatOffset != null
+                    ? `offset ${beatOffset.toFixed(3)}s · ${track.originalBpm} BPM`
+                    : "no beat data"}
+                </p>
+              </div>
+              {beatOffset != null && beatInterval != null && (
+                <div className="flex items-center gap-xs shrink-0">
+                  <button
+                    onClick={() => shiftBeat(-1)}
+                    disabled={savingOffset || beatOffset <= 0}
+                    title={`Shift back 1 beat (${beatInterval.toFixed(3)}s)`}
+                    className="w-7 h-7 rounded-md bg-paper-raised hover:bg-paper-edge disabled:opacity-30 transition-colors text-ink text-caption font-bold flex items-center justify-center"
+                  >
+                    ◂
+                  </button>
+                  <button
+                    onClick={() => shiftBeat(1)}
+                    disabled={savingOffset}
+                    title={`Shift forward 1 beat (${beatInterval.toFixed(3)}s)`}
+                    className="w-7 h-7 rounded-md bg-paper-raised hover:bg-paper-edge disabled:opacity-30 transition-colors text-ink text-caption font-bold flex items-center justify-center"
+                  >
+                    ▸
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       ) : null}
     </li>
@@ -501,6 +557,9 @@ export default function TrackList({ sort = "date" }: { sort?: SortOption }) {
             track={track}
             getToken={getToken}
             onLongPress={() => setActiveTrack(track)}
+            onBeatOffsetChange={(id, offset) =>
+              setTracks((prev) => prev.map((t) => t.id === id ? { ...t, beatOffset: offset } : t))
+            }
           />
         ))}
       </ul>
