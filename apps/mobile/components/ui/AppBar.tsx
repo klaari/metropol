@@ -6,6 +6,12 @@ import { Text } from "./Text";
 
 interface AppBarProps {
   title?: string;
+  /**
+   * Quieter centered label — rendered in caption + ink-soft. Use when
+   * the centered text is contextual (e.g. an album name on the player)
+   * rather than the screen's own title.
+   */
+  subtitle?: string;
   /** Show a back chevron. Triggers `onBack`. */
   onBack?: () => void;
   /** Optional trailing slot — a single icon button. Keep it to one. */
@@ -15,9 +21,10 @@ interface AppBarProps {
 /**
  * The 3-slot top bar: leading icon | centered title | trailing slot.
  * Title is rendered in the body voice, not display — the screen's
- * own hero carries the headline.
+ * own hero carries the headline. Use `subtitle` instead of `title`
+ * when the centered text is supporting context, not the screen's name.
  */
-export function AppBar({ title, onBack, trailing }: AppBarProps) {
+export function AppBar({ title, subtitle, onBack, trailing }: AppBarProps) {
   return (
     <View
       style={{
@@ -38,7 +45,11 @@ export function AppBar({ title, onBack, trailing }: AppBarProps) {
         ) : null}
       </View>
       <View style={{ flex: 1, alignItems: "center" }}>
-        {title ? (
+        {subtitle ? (
+          <Text variant="caption" tone="secondary" numberOfLines={1}>
+            {subtitle}
+          </Text>
+        ) : title ? (
           <Text variant="bodyStrong" tone="primary" numberOfLines={1}>
             {title}
           </Text>

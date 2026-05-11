@@ -41,6 +41,16 @@ export { IconButton } from "./IconButton";
 export { ListRow } from "./ListRow";
 export { SettingsRow } from "./SettingsRow";
 
+// Player-surface primitives
+export { TempoCluster } from "./TempoCluster";
+export { Vinyl } from "./Vinyl";
+export { WaveformScrubber } from "./WaveformScrubber";
+
+// Queue / library row primitives
+export { ActionSheet, type ActionItem } from "./ActionSheet";
+export { Eq } from "./Eq";
+export { MiniTile } from "./MiniTile";
+
 // Token re-exports — for the rare case a primitive consumer needs a literal.
 // Prefer typed props on primitives over reaching for these.
 export {
