@@ -1,0 +1,129 @@
+diff --git a/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js b/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js
+index 6834943..a270bf0 100644
+--- a/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js
++++ b/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-dev.js
+@@ -16616,10 +16616,10 @@ __DEV__ &&
+     (function () {
+       var internals = {
+         bundleType: 1,
+-        version: "19.1.0",
++        version: "19.1.7",
+         rendererPackageName: "react-native-renderer",
+         currentDispatcherRef: ReactSharedInternals,
+-        reconcilerVersion: "19.1.0"
++        reconcilerVersion: "19.1.7"
+       };
+       null !== extraDevToolsConfig &&
+         (internals.rendererConfig = extraDevToolsConfig);
+diff --git a/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-prod.js b/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-prod.js
+index 2ae02a3..532dd4d 100644
+--- a/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-prod.js
++++ b/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-prod.js
+@@ -10417,10 +10417,10 @@ batchedUpdatesImpl = function (fn, a) {
+ var roots = new Map(),
+   internals$jscomp$inline_1206 = {
+     bundleType: 0,
+-    version: "19.1.0",
++    version: "19.1.7",
+     rendererPackageName: "react-native-renderer",
+     currentDispatcherRef: ReactSharedInternals,
+-    reconcilerVersion: "19.1.0"
++    reconcilerVersion: "19.1.7"
+   };
+ null !== extraDevToolsConfig &&
+   (internals$jscomp$inline_1206.rendererConfig = extraDevToolsConfig);
+diff --git a/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-profiling.js b/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-profiling.js
+index 1b5c4b7..b0db3ea 100644
+--- a/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-profiling.js
++++ b/node_modules/react-native/Libraries/Renderer/implementations/ReactFabric-profiling.js
+@@ -11057,10 +11057,10 @@ batchedUpdatesImpl = function (fn, a) {
+ var roots = new Map(),
+   internals$jscomp$inline_1299 = {
+     bundleType: 0,
+-    version: "19.1.0",
++    version: "19.1.7",
+     rendererPackageName: "react-native-renderer",
+     currentDispatcherRef: ReactSharedInternals,
+-    reconcilerVersion: "19.1.0"
++    reconcilerVersion: "19.1.7"
+   };
+ null !== extraDevToolsConfig &&
+   (internals$jscomp$inline_1299.rendererConfig = extraDevToolsConfig);
+diff --git a/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-dev.js b/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-dev.js
+index 9d66361..d618bcb 100644
+--- a/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-dev.js
++++ b/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-dev.js
+@@ -16868,7 +16868,7 @@ __DEV__ &&
+       shouldSuspendImpl = newShouldSuspendImpl;
+     };
+     var isomorphicReactPackageVersion = React.version;
+-    if ("19.1.0" !== isomorphicReactPackageVersion)
++    if ("19.1.7" !== isomorphicReactPackageVersion)
+       throw Error(
+         'Incompatible React versions: The "react" and "react-native-renderer" packages must have the exact same version. Instead got:\n  - react:                  ' +
+           (isomorphicReactPackageVersion +
+@@ -16898,10 +16898,10 @@ __DEV__ &&
+     (function () {
+       var internals = {
+         bundleType: 1,
+-        version: "19.1.0",
++        version: "19.1.7",
+         rendererPackageName: "react-native-renderer",
+         currentDispatcherRef: ReactSharedInternals,
+-        reconcilerVersion: "19.1.0"
++        reconcilerVersion: "19.1.7"
+       };
+       null !== extraDevToolsConfig &&
+         (internals.rendererConfig = extraDevToolsConfig);
+diff --git a/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-prod.js b/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-prod.js
+index b3d1cfa..de7edf2 100644
+--- a/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-prod.js
++++ b/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-prod.js
+@@ -10603,7 +10603,7 @@ function updateContainer(element, container, parentComponent, callback) {
+   return lane;
+ }
+ var isomorphicReactPackageVersion = React.version;
+-if ("19.1.0" !== isomorphicReactPackageVersion)
++if ("19.1.7" !== isomorphicReactPackageVersion)
+   throw Error(
+     'Incompatible React versions: The "react" and "react-native-renderer" packages must have the exact same version. Instead got:\n  - react:                  ' +
+       (isomorphicReactPackageVersion +
+@@ -10656,10 +10656,10 @@ batchedUpdatesImpl = function (fn, a) {
+ var roots = new Map(),
+   internals$jscomp$inline_1269 = {
+     bundleType: 0,
+-    version: "19.1.0",
++    version: "19.1.7",
+     rendererPackageName: "react-native-renderer",
+     currentDispatcherRef: ReactSharedInternals,
+-    reconcilerVersion: "19.1.0"
++    reconcilerVersion: "19.1.7"
+   };
+ null !== extraDevToolsConfig &&
+   (internals$jscomp$inline_1269.rendererConfig = extraDevToolsConfig);
+diff --git a/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-profiling.js b/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-profiling.js
+index b317ca1..b684bd2 100644
+--- a/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-profiling.js
++++ b/node_modules/react-native/Libraries/Renderer/implementations/ReactNativeRenderer-profiling.js
+@@ -11245,7 +11245,7 @@ function updateContainer(element, container, parentComponent, callback) {
+   return lane;
+ }
+ var isomorphicReactPackageVersion = React.version;
+-if ("19.1.0" !== isomorphicReactPackageVersion)
++if ("19.1.7" !== isomorphicReactPackageVersion)
+   throw Error(
+     'Incompatible React versions: The "react" and "react-native-renderer" packages must have the exact same version. Instead got:\n  - react:                  ' +
+       (isomorphicReactPackageVersion +
+@@ -11298,10 +11298,10 @@ batchedUpdatesImpl = function (fn, a) {
+ var roots = new Map(),
+   internals$jscomp$inline_1362 = {
+     bundleType: 0,
+-    version: "19.1.0",
++    version: "19.1.7",
+     rendererPackageName: "react-native-renderer",
+     currentDispatcherRef: ReactSharedInternals,
+-    reconcilerVersion: "19.1.0"
++    reconcilerVersion: "19.1.7"
+   };
+ null !== extraDevToolsConfig &&
+   (internals$jscomp$inline_1362.rendererConfig = extraDevToolsConfig);
