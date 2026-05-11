@@ -1,45 +1,43 @@
-import { userTracks, type DiscogsMetadata } from "@aani/db";
+import type { DiscogsMetadata } from "@aani/db";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { and, eq } from "drizzle-orm";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Image,
-  Keyboard,
-  type LayoutChangeEvent,
-  Modal,
-  PanResponder,
-  View,
-} from "react-native";
-import DiscogsSheet from "../../components/DiscogsSheet";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, View } from "react-native";
 import PlaylistPickerSheet from "../../components/PlaylistPickerSheet";
 import {
   AppBar,
   Button,
   HStack,
   IconButton,
-  Input,
   Pressable,
   Screen,
-  Surface,
+  TempoCluster,
   Text,
   VStack,
+  Vinyl,
+  WaveformScrubber,
   palette,
   radius,
   space,
 } from "../../components/ui";
 import { useCurrentTrack } from "../../hooks/useCurrentTrack";
 import { apiFetch } from "../../lib/api";
-import { getDb } from "../../lib/db";
-import { getTrackPlayer, isNativeModuleAvailable } from "../../lib/trackPlayer";
+import {
+  getTrackPlayer,
+  isNativeModuleAvailable,
+} from "../../lib/trackPlayer";
 import { useLibraryStore } from "../../store/library";
 import { usePlayerStore } from "../../store/player";
 
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
+const PLAY_BUTTON_SIZE = 64;
+const TRANSPORT_BUTTON_SIZE = 48;
+const SECONDARY_BUTTON_SIZE = 36;
+
+function formatTime(secs: number): string {
+  const safe = Math.max(0, Math.round(secs));
+  const m = Math.floor(safe / 60);
+  const s = safe % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
@@ -48,74 +46,23 @@ export default function PlayerScreen() {
   const { userId, getToken } = useAuth();
   const router = useRouter();
 
-  const {
-    queue,
-    playbackRate,
-    playWithQueue,
-    skipToIndex,
-    setRate,
-    savePosition,
-    debugInfo,
-    playing,
-    position,
-    duration,
-  } = usePlayerStore();
+  const playing = usePlayerStore((s) => s.playing);
+  const position = usePlayerStore((s) => s.position);
+  const duration = usePlayerStore((s) => s.duration);
+  const playbackRate = usePlayerStore((s) => s.playbackRate);
+  const queue = usePlayerStore((s) => s.queue);
+  const playWithQueue = usePlayerStore((s) => s.playWithQueue);
+  const skipToIndex = usePlayerStore((s) => s.skipToIndex);
+  const setRate = usePlayerStore((s) => s.setRate);
+  const togglePlayPause = usePlayerStore((s) => s.togglePlayPause);
+  const savePosition = usePlayerStore((s) => s.savePosition);
+  const setQueueSheetVisible = usePlayerStore((s) => s.setQueueSheetVisible);
+
   const currentTrack = useCurrentTrack();
 
   const [loading, setLoading] = useState(false);
-  const [editingBpm, setEditingBpm] = useState(false);
-  const [bpmInput, setBpmInput] = useState("");
   const [pickerTrack, setPickerTrack] = useState<{ id: string; title: string } | null>(null);
-  const [discogsOpen, setDiscogsOpen] = useState(false);
-  const [discogsMeta, setDiscogsMeta] = useState<DiscogsMetadata | null>(null);
-  const [discogsInCollection, setDiscogsInCollection] = useState(false);
-  const [discogsInWantlist, setDiscogsInWantlist] = useState(false);
-  const [kbHeight, setKbHeight] = useState(0);
-
-  useEffect(() => {
-    const showSub = Keyboard.addListener("keyboardDidShow", (e) =>
-      setKbHeight(e.endCoordinates.height),
-    );
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => setKbHeight(0));
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, []);
-
-  const seekBarWidth = useRef(0);
-  const seekBarX = useRef(0);
-  const [dragSeconds, setDragSeconds] = useState<number | null>(null);
-  const dragSecondsRef = useRef<number | null>(null);
-  const durationRef = useRef(0);
-
-  useEffect(() => {
-    durationRef.current = duration;
-  }, [duration]);
-
-  useEffect(() => {
-    setDiscogsMeta(null);
-    setDiscogsInCollection(false);
-    setDiscogsInWantlist(false);
-    if (!currentTrack?.id) return;
-    let cancelled = false;
-    (async () => {
-      const token = await getToken();
-      if (!token || cancelled) return;
-      const { data } = await apiFetch<{
-        metadata: DiscogsMetadata | null;
-        inCollection: boolean;
-        inWantlist: boolean;
-      }>(`/discogs/track/${currentTrack.id}`, token);
-      if (cancelled || !data) return;
-      setDiscogsMeta(data.metadata);
-      setDiscogsInCollection(data.inCollection);
-      setDiscogsInWantlist(data.inWantlist);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [currentTrack?.id, getToken]);
+  const [albumSubtitle, setAlbumSubtitle] = useState<string>("");
 
   useEffect(() => {
     if (!id || !userId) return;
@@ -138,123 +85,45 @@ export default function PlayerScreen() {
     };
   }, [id, userId]);
 
+  useEffect(() => {
+    setAlbumSubtitle("");
+    if (!currentTrack?.id) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getToken();
+      if (!token || cancelled) return;
+      const { data } = await apiFetch<{ metadata: DiscogsMetadata | null }>(
+        `/discogs/track/${currentTrack.id}`,
+        token,
+      );
+      if (cancelled || !data?.metadata?.title) return;
+      setAlbumSubtitle(data.metadata.title);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack?.id, getToken]);
+
   const adjustRate = useCallback(
     (delta: number) => {
       if (!userId) return;
-      const newRate = Math.round((playbackRate + delta) * 1000) / 1000;
-      const clamped = Math.max(0.92, Math.min(1.08, newRate));
+      const next = Math.round((playbackRate + delta) * 1000) / 1000;
+      const clamped = Math.max(0.92, Math.min(1.08, next));
       setRate(clamped, userId);
     },
     [playbackRate, userId, setRate],
   );
 
-  const ratePercent = Math.round((playbackRate - 1) * 1000) / 10;
-  const rateDisplay =
-    ratePercent === 0
-      ? "0%"
-      : ratePercent > 0
-        ? `+${ratePercent.toFixed(1)}%`
-        : `${ratePercent.toFixed(1)}%`;
-
-  const originalBpm = currentTrack?.originalBpm;
-  const currentBpm =
-    originalBpm != null
-      ? Math.round(originalBpm * playbackRate * 10) / 10
-      : null;
-
-  async function handleSeek(value: number) {
-    const tp = getTrackPlayer();
-    if (tp) await tp.seekTo(value);
+  function handleSeek(ratio: number) {
+    if (duration <= 0) return;
+    const target = ratio * duration;
+    getTrackPlayer()?.seekTo(target).catch(() => {});
   }
-
-  function setDrag(seconds: number | null) {
-    dragSecondsRef.current = seconds;
-    setDragSeconds(seconds);
-  }
-
-  function ratioFromPageX(pageX: number): number {
-    const w = seekBarWidth.current;
-    if (w <= 0) return 0;
-    return Math.max(0, Math.min(1, (pageX - seekBarX.current) / w));
-  }
-
-  const seekPan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderTerminationRequest: () => false,
-      onPanResponderGrant: (e) => {
-        const ratio = ratioFromPageX(e.nativeEvent.pageX);
-        setDrag(ratio * durationRef.current);
-      },
-      onPanResponderMove: (e) => {
-        const ratio = ratioFromPageX(e.nativeEvent.pageX);
-        setDrag(ratio * durationRef.current);
-      },
-      onPanResponderRelease: () => {
-        const target = dragSecondsRef.current;
-        if (target != null) handleSeek(target);
-        setDrag(null);
-      },
-      onPanResponderTerminate: () => setDrag(null),
-    }),
-  ).current;
-
-  const [playDebug, setPlayDebug] = useState("");
-  const togglePlayPause = usePlayerStore((s) => s.togglePlayPause);
 
   async function handleTogglePlayPause() {
     const wasPlaying = usePlayerStore.getState().playing;
     await togglePlayPause();
-    setPlayDebug(wasPlaying ? "pause requested" : "play requested");
     if (wasPlaying && userId) savePosition(userId);
-  }
-
-  const handleDiscogsClose = useCallback(() => setDiscogsOpen(false), []);
-
-  const handleDiscogsEnrichmentChange = useCallback(
-    (d: { metadata: DiscogsMetadata | null; inCollection: boolean; inWantlist: boolean }) => {
-      setDiscogsMeta(d.metadata);
-      setDiscogsInCollection(d.inCollection);
-      setDiscogsInWantlist(d.inWantlist);
-    },
-    [],
-  );
-
-  function startBpmEdit() {
-    setBpmInput(originalBpm != null ? String(originalBpm) : "");
-    setEditingBpm(true);
-  }
-
-  async function persistBpm(value: number | null) {
-    if (!currentTrack || !userId) return;
-    const trackId = currentTrack.id;
-    await getDb()
-      .update(userTracks)
-      .set({ originalBpm: value })
-      .where(
-        and(eq(userTracks.userId, userId), eq(userTracks.trackId, trackId)),
-      );
-    usePlayerStore.setState((s) => ({
-      queue: s.queue.map((q) =>
-        q.trackId === trackId
-          ? { ...q, track: { ...q.track, originalBpm: value } }
-          : q,
-      ),
-    }));
-  }
-
-  async function saveBpm() {
-    setEditingBpm(false);
-    const parsed = bpmInput.trim() ? parseFloat(bpmInput.trim()) : null;
-    if (parsed != null && (isNaN(parsed) || parsed <= 0)) return;
-    await persistBpm(parsed);
-  }
-
-  function setBpmScale(factor: number) {
-    const cur = parseFloat(bpmInput);
-    if (!isFinite(cur) || cur <= 0) return;
-    setBpmInput(String(Math.round(cur * factor * 10) / 10));
   }
 
   if (!isNativeModuleAvailable()) {
@@ -294,334 +163,160 @@ export default function PlayerScreen() {
     );
   }
 
-  const shownSeconds = dragSeconds != null ? dragSeconds : position;
-  const seekPct = duration > 0 ? Math.max(0, Math.min(100, (shownSeconds / duration) * 100)) : 0;
-  const discogsDot = discogsInCollection
-    ? palette.positive
-    : discogsInWantlist
-      ? palette.critical
-      : null;
-
-  const heroSize = 304;
-  const heroShadow = {
-    shadowColor: palette.ink,
-    shadowOpacity: 0.12,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 6,
-  } as const;
+  const remaining = Math.max(0, duration - position);
+  const seekValue = duration > 0 ? Math.max(0, Math.min(1, position / duration)) : 0;
 
   return (
-    <Screen>
-      <VStack gap="xl">
+    <Screen scroll={false} inset={false}>
+      <VStack flex>
         <AppBar
+          subtitle={albumSubtitle}
           onBack={() => router.back()}
           trailing={
             <IconButton
-              icon="list"
+              icon="list-outline"
+              size={22}
               accessibilityLabel="Open queue"
-              onPress={() => usePlayerStore.getState().setQueueSheetVisible(true)}
+              onPress={() => setQueueSheetVisible(true)}
             />
           }
         />
 
-        <VStack gap="lg" align="center">
-          {discogsMeta?.coverUrl ? (
-            <Image
-              source={{ uri: discogsMeta.coverUrl }}
-              resizeMode="cover"
-              style={{
-                width: heroSize,
-                height: heroSize,
-                borderRadius: radius.xl,
-                backgroundColor: palette.paperSunken,
-                ...heroShadow,
-              }}
-            />
-          ) : (
-            <View
-              style={{
-                width: heroSize,
-                height: heroSize,
-                borderRadius: radius.xl,
-                backgroundColor: palette.paperSunken,
-                alignItems: "center",
-                justifyContent: "center",
-                ...heroShadow,
-              }}
-            >
-              <Text variant="display" tone="faint">
-                ♫
-              </Text>
-            </View>
-          )}
+        <View
+          style={{
+            flex: 1,
+            paddingHorizontal: space.lg,
+            paddingBottom: space.base,
+            gap: space.lg,
+          }}
+        >
+          <View
+            style={{
+              alignItems: "center",
+              paddingTop: space.lg,
+              paddingBottom: space.sm,
+            }}
+          >
+            <Vinyl size={280} playing={playing} />
+          </View>
 
-          <VStack gap="xs" align="center" padX="base">
-            <Text variant="display" align="center" numberOfLines={2}>
+          <VStack gap="xs" align="center">
+            <Text variant="titleLg" numberOfLines={1} align="center">
               {currentTrack.title}
             </Text>
             {currentTrack.artist ? (
-              <Text variant="bodyLg" tone="muted" align="center">
+              <Text variant="bodyStrong" tone="secondary" align="center">
                 {currentTrack.artist}
               </Text>
             ) : null}
-            {discogsMeta ? (
-              <Text variant="caption" tone="faint" align="center" numberOfLines={2}>
-                {[
-                  discogsMeta.year ? String(discogsMeta.year) : null,
-                  discogsMeta.label,
-                  discogsMeta.catalogNumber,
-                  (discogsMeta.styles ?? discogsMeta.genres ?? [])
-                    .slice(0, 2)
-                    .join(", ") || null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Text>
-            ) : null}
           </VStack>
 
-          <HStack justify="center" gap="lg">
-            <View>
-              <IconButton
-                icon={discogsMeta ? "disc" : "disc-outline"}
-                accessibilityLabel="Open Discogs"
-                onPress={() => setDiscogsOpen(true)}
-              />
-              {discogsDot ? (
-                <View
-                  style={{
-                    position: "absolute",
-                    top: space.xs,
-                    right: space.xs,
-                    width: space.sm,
-                    height: space.sm,
-                    borderRadius: radius.full,
-                    borderWidth: 1.5,
-                    borderColor: palette.paper,
-                    backgroundColor: discogsDot,
-                  }}
-                />
-              ) : null}
-            </View>
-            <IconButton
-              icon="add-circle-outline"
-              accessibilityLabel="Add to playlist"
-              onPress={() => setPickerTrack({ id: currentTrack.id, title: currentTrack.title })}
-            />
-          </HStack>
-        </VStack>
+          <TempoCluster
+            originalBpm={currentTrack.originalBpm ?? null}
+            rate={playbackRate}
+            onAdjust={adjustRate}
+            onReset={() => userId && setRate(1.0, userId)}
+          />
 
-        <VStack gap="xs">
-          <View
-            onLayout={(e: LayoutChangeEvent) => {
-              seekBarWidth.current = e.nativeEvent.layout.width;
-              (e.target as any)?.measure?.(
-                (_x: number, _y: number, _w: number, _h: number, pageX: number) => {
-                  if (typeof pageX === "number") seekBarX.current = pageX;
-                },
-              );
-            }}
-            style={{ height: 32, justifyContent: "center" }}
-            {...seekPan.panHandlers}
-          >
-            <View
+          <View style={{ flex: 1 }} />
+
+          <VStack gap="xs">
+            <WaveformScrubber value={seekValue} onChange={handleSeek} />
+            <HStack justify="between" style={{ paddingTop: space.xs }}>
+              <Text variant="numeric" tone="muted">
+                {formatTime(position)}
+              </Text>
+              <Text variant="numeric" tone="muted">
+                −{formatTime(remaining)}
+              </Text>
+            </HStack>
+          </VStack>
+
+          <HStack justify="center" align="center" gap="xl">
+            <Pressable
+              onPress={() => getTrackPlayer()?.skipToPrevious().catch(() => {})}
+              accessibilityLabel="Previous track"
+              accessibilityRole="button"
               style={{
-                height: 6,
-                backgroundColor: palette.paperEdge,
+                width: TRANSPORT_BUTTON_SIZE,
+                height: TRANSPORT_BUTTON_SIZE,
                 borderRadius: radius.full,
+                alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <View
-                style={{
-                  position: "absolute",
-                  left: 0,
-                  top: 0,
-                  bottom: 0,
-                  width: `${seekPct}%`,
-                  backgroundColor: palette.ink,
-                  borderRadius: radius.full,
-                }}
+              <Ionicons name="play-skip-back" size={28} color={palette.ink} />
+            </Pressable>
+
+            <Pressable
+              onPress={handleTogglePlayPause}
+              accessibilityLabel={playing ? "Pause" : "Play"}
+              accessibilityRole="button"
+              style={{
+                width: PLAY_BUTTON_SIZE,
+                height: PLAY_BUTTON_SIZE,
+                borderRadius: radius.full,
+                backgroundColor: palette.ink,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons
+                name={playing ? "pause" : "play"}
+                size={28}
+                color={palette.inkInverse}
               />
-              <View
-                style={{
-                  position: "absolute",
-                  width: dragSeconds != null ? 18 : 14,
-                  height: dragSeconds != null ? 18 : 14,
-                  borderRadius: radius.full,
-                  backgroundColor: palette.ink,
-                  top: dragSeconds != null ? -6 : -4,
-                  left: `${seekPct}%`,
-                  marginLeft: dragSeconds != null ? -9 : -7,
-                }}
+            </Pressable>
+
+            <Pressable
+              onPress={() => getTrackPlayer()?.skipToNext().catch(() => {})}
+              accessibilityLabel="Next track"
+              accessibilityRole="button"
+              style={{
+                width: TRANSPORT_BUTTON_SIZE,
+                height: TRANSPORT_BUTTON_SIZE,
+                borderRadius: radius.full,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Ionicons
+                name="play-skip-forward"
+                size={28}
+                color={palette.ink}
               />
-            </View>
-          </View>
-          <HStack justify="between">
-            <Text variant="numeric" tone="muted">
-              {formatTime(shownSeconds)}
-            </Text>
-            <Text variant="numeric" tone="muted">
-              {formatTime(duration)}
-            </Text>
+            </Pressable>
           </HStack>
-        </VStack>
 
-        <HStack justify="center" align="center" gap="2xl">
-          <IconButton
-            icon="play-skip-back"
-            accessibilityLabel="Previous track"
-            onPress={() => getTrackPlayer()?.skipToPrevious().catch(() => {})}
-            size={28}
-          />
-          <IconButton
-            icon={playing ? "pause" : "play"}
-            accessibilityLabel={playing ? "Pause" : "Play"}
-            variant="filled"
-            onPress={handleTogglePlayPause}
-            size={32}
-          />
-          <IconButton
-            icon="play-skip-forward"
-            accessibilityLabel="Next track"
-            onPress={() => getTrackPlayer()?.skipToNext().catch(() => {})}
-            size={28}
-          />
-        </HStack>
-
-        <Surface tone="raised" rounded="lg" pad="lg" bordered>
-          <VStack gap="md">
-            <HStack justify="between" align="center">
-              <Text variant="eyebrow" tone="muted">
-                Tempo
-              </Text>
-              {playbackRate !== 1 ? (
-                <Button
-                  label="Reset"
-                  size="sm"
-                  variant="ghost"
-                  onPress={() => userId && setRate(1.0, userId)}
-                  leading={<Ionicons name="refresh" size={14} color={palette.ink} />}
-                />
-              ) : null}
-            </HStack>
-            <Text variant="display" numeric align="center">
-              {rateDisplay}
-            </Text>
-            <HStack gap="md">
-              <View style={{ flex: 1 }}>
-                <Button label="−0.5%" variant="secondary" block onPress={() => adjustRate(-0.005)} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Button label="+0.5%" variant="secondary" block onPress={() => adjustRate(0.005)} />
-              </View>
-            </HStack>
-          </VStack>
-        </Surface>
-
-        <Pressable flat onPress={startBpmEdit}>
-          <Surface tone="raised" rounded="lg" pad="lg" bordered>
-            <VStack gap="xs">
-              <HStack justify="between" align="center">
-                <Text variant="eyebrow" tone="muted">
-                  BPM
-                </Text>
-                <Ionicons name="create-outline" size={16} color={palette.inkMuted} />
-              </HStack>
-              <Text variant="display" numeric>
-                {currentBpm != null ? currentBpm.toFixed(1) : "—"}
-              </Text>
-              {playbackRate !== 1 && originalBpm != null ? (
-                <Text variant="caption" tone="muted">
-                  Original {originalBpm}
-                </Text>
-              ) : null}
-            </VStack>
-          </Surface>
-        </Pressable>
-
-        {__DEV__ ? (
-          <Surface tone="sunken" rounded="md" pad="sm">
-            <Text variant="caption" tone="warning">
-              {debugInfo || "(no load debug)"}
-            </Text>
-            {playDebug ? (
-              <Text variant="caption" tone="positive">
-                play: {playDebug}
-              </Text>
-            ) : null}
-          </Surface>
-        ) : null}
-
-        <Modal
-          visible={editingBpm}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setEditingBpm(false)}
-        >
-          <Pressable
-            flat
-            style={{ flex: 1, backgroundColor: "rgba(22,19,14,0.45)" }}
-            onPress={() => setEditingBpm(false)}
-          />
-          <View
-            pointerEvents="box-none"
-            style={{
-              position: "absolute",
-              left: space.lg,
-              right: space.lg,
-              top: 0,
-              bottom: kbHeight,
-              justifyContent: "center",
-            }}
-          >
-            <Surface tone="raised" lift="popover" rounded="xl" pad="lg" bordered>
-              <VStack gap="md">
-                <Text variant="title" align="center">
-                  Set BPM
-                </Text>
-                <Input
-                  value={bpmInput}
-                  onChangeText={setBpmInput}
-                  keyboardType="decimal-pad"
-                  autoFocus
-                  selectTextOnFocus
-                  placeholder="128"
-                  onSubmitEditing={saveBpm}
-                  returnKeyType="done"
-                />
-                <HStack justify="center" gap="md">
-                  <Button label="÷2" variant="secondary" onPress={() => setBpmScale(0.5)} />
-                  <Button label="×2" variant="secondary" onPress={() => setBpmScale(2)} />
-                </HStack>
-                <HStack justify="end" gap="sm">
-                  <Button
-                    label="Cancel"
-                    variant="ghost"
-                    onPress={() => setEditingBpm(false)}
-                  />
-                  <Button label="Save" onPress={saveBpm} />
-                </HStack>
-              </VStack>
-            </Surface>
-          </View>
-        </Modal>
-
-        <PlaylistPickerSheet
-          visible={pickerTrack != null}
-          track={pickerTrack}
-          onClose={() => setPickerTrack(null)}
-        />
-
-        <DiscogsSheet
-          visible={discogsOpen}
-          trackId={currentTrack.id}
-          defaultQuery={`${currentTrack.artist ?? ""} ${currentTrack.title}`.trim()}
-          onClose={handleDiscogsClose}
-          onEnrichmentChange={handleDiscogsEnrichmentChange}
-        />
+          <HStack justify="between" align="center" padY="xs">
+            <IconButton
+              icon="list-outline"
+              size={22}
+              color={palette.inkSoft}
+              accessibilityLabel="Open queue"
+              onPress={() => setQueueSheetVisible(true)}
+            />
+            <View
+              style={{ width: SECONDARY_BUTTON_SIZE, height: SECONDARY_BUTTON_SIZE }}
+            />
+            <IconButton
+              icon="add-circle-outline"
+              size={22}
+              color={palette.inkSoft}
+              accessibilityLabel="Add to playlist"
+              onPress={() =>
+                setPickerTrack({ id: currentTrack.id, title: currentTrack.title })
+              }
+            />
+          </HStack>
+        </View>
       </VStack>
+
+      <PlaylistPickerSheet
+        visible={pickerTrack != null}
+        track={pickerTrack}
+        onClose={() => setPickerTrack(null)}
+      />
     </Screen>
   );
 }
