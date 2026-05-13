@@ -25,9 +25,18 @@ fi
 #   AANI_API_KEY  - API key matching the API_KEY env var on the server
 #   AANI_USER_ID  - Your Clerk user ID
 
-: "${AANI_API_URL:?Set AANI_API_URL}"
+# AANI_API_URL falls back to EXPO_PUBLIC_API_URL so the mobile app's .env can be reused
+: "${AANI_API_URL:=${EXPO_PUBLIC_API_URL:-}}"
+: "${AANI_API_URL:?Set AANI_API_URL (or EXPO_PUBLIC_API_URL)}"
 : "${AANI_API_KEY:?Set AANI_API_KEY}"
 : "${AANI_USER_ID:?Set AANI_USER_ID}"
+
+# Force https:// — Railway redirects http→https, and curl drops the POST body across that redirect
+case "$AANI_API_URL" in
+  http://*) AANI_API_URL="https://${AANI_API_URL#http://}" ;;
+  https://*) ;;
+  *) AANI_API_URL="https://${AANI_API_URL}" ;;
+esac
 
 BROWSER="chrome"
 REBUILD=0
@@ -57,7 +66,7 @@ print(f'Saved {len(out)} YouTube/Google cookies')
 "
 
 echo "Uploading to ${AANI_API_URL}/cookies..."
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "${AANI_API_URL}/cookies" -H "X-API-Key: ${AANI_API_KEY}" -H "X-User-Id: ${AANI_USER_ID}" -F "cookies=@${TMPFILE}")
+RESPONSE=$(curl -sL --post301 --post302 --post303 -w "\n%{http_code}" -X POST "${AANI_API_URL}/cookies" -H "X-API-Key: ${AANI_API_KEY}" -H "X-User-Id: ${AANI_USER_ID}" -F "cookies=@${TMPFILE}")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | sed '$d')
