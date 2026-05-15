@@ -24,6 +24,7 @@
     "preview": {
       "distribution": "internal",
       "channel": "preview",
+      "node": "24.14.0",
       "android": {
         "buildType": "apk"
       },

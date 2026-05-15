@@ -27,6 +27,7 @@
   ],
   "overrides": {
     "react": "19.1.7",
-    "react-dom": "19.1.7"
+    "react-dom": "19.1.7",
+    "utf-8-validate": "^5.0.10"
   }
 }
