@@ -26,14 +26,18 @@ function hashIndex(str: string, mod: number): number {
   return h % mod;
 }
 
+// Skips whitespace, punctuation, symbols, and quotes — anything that isn't
+// a letter or digit (across scripts) is treated as decoration around a word.
+const LETTER_RE = /\p{L}|\p{N}/u;
+
 function initials(title: string): string {
-  return title
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]!)
-    .join("")
-    .toUpperCase();
+  const letters: string[] = [];
+  for (const word of title.split(/\s+/)) {
+    const m = word.match(LETTER_RE);
+    if (m) letters.push(m[0]);
+    if (letters.length === 2) break;
+  }
+  return letters.join("").toUpperCase() || "·";
 }
 
 /**
