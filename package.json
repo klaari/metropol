@@ -7,9 +7,11 @@
     "check-types": "turbo run check-types",
     "lint": "turbo run lint",
     "db:generate": "turbo run db:generate",
-    "db:push": "turbo run db:push"
+    "db:push": "turbo run db:push",
+    "postinstall": "patch-package"
   },
   "devDependencies": {
+    "patch-package": "^8.0.1",
     "react": "19.1.7",
     "react-dom": "19.1.7",
     "react-native-reanimated": "~3.19.5",
