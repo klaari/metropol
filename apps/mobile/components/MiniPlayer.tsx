@@ -80,7 +80,7 @@ export default function MiniPlayer() {
   const isAlteredRate = playbackRate !== 1 && originalBpm != null;
 
   return (
-    <Surface tone="raised" rounded="none" pad="none" bordered>
+    <Surface tone="raised" rounded="none" pad="none">
       <ProgressBar value={progress} />
       <Pressable
         flat
@@ -125,25 +125,21 @@ export default function MiniPlayer() {
               minWidth: 52,
               paddingHorizontal: space.sm,
               paddingVertical: space.xs,
-              borderRadius: radius.md,
-              backgroundColor: isAlteredRate
-                ? palette.cobalt
-                : palette.transparent,
             }}
           >
             <Text
               variant="numeric"
-              tone={isAlteredRate ? "inverse" : "primary"}
+              tone={isAlteredRate ? "accent" : "primary"}
               numeric
             >
               {currentBpm != null ? currentBpm.toFixed(1) : "—"}
             </Text>
             <Text
               variant="eyebrow"
-              tone={isAlteredRate ? "inverse" : "muted"}
+              tone={isAlteredRate ? "accent" : "muted"}
               numeric={isAlteredRate}
             >
-              {isAlteredRate ? originalBpm : "BPM"}
+              {isAlteredRate ? rateDisplay : "BPM"}
             </Text>
           </Pressable>
           <IconButton
