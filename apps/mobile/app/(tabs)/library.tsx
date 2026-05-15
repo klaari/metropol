@@ -1,48 +1,47 @@
 import { tracks, userTracks } from "@aani/db";
 import type { LibraryTrack, Track } from "@aani/types";
 import { useAuth } from "@clerk/clerk-expo";
+import { Ionicons } from "@expo/vector-icons";
 import { and, eq } from "drizzle-orm";
+import * as Crypto from "expo-crypto";
 import * as DocumentPicker from "expo-document-picker";
 import {
   EncodingType,
+  FileSystemUploadType,
   readAsStringAsync,
   uploadAsync,
-  FileSystemUploadType,
 } from "expo-file-system/legacy";
-import * as Crypto from "expo-crypto";
 import { useFocusEffect, useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import {
-  ActionSheetIOS,
   ActivityIndicator,
   Alert,
   FlatList,
-  Modal,
-  Platform,
-  SectionList,
+  ScrollView,
   View,
+  type ListRenderItemInfo,
 } from "react-native";
 import EditTrackModal from "../../components/EditTrackModal";
-import TrackItem from "../../components/TrackItem";
+import PlaylistPickerSheet from "../../components/PlaylistPickerSheet";
 import {
-  AppBar,
-  Button,
-  Divider,
+  ActionSheet,
+  type ActionItem,
   HStack,
   IconButton,
   Input,
+  MiniTile,
+  PlaylistCard,
   Pressable,
   Screen,
-  Surface,
   Text,
   VStack,
   palette,
+  radius,
   space,
 } from "../../components/ui";
 import { getDb } from "../../lib/db";
-import { buildContentKey, getUploadUrl } from "../../lib/r2";
 import { ensureLocalCopy } from "../../lib/localAudio";
+import { buildContentKey, getUploadUrl } from "../../lib/r2";
 import { type SortOption, useLibraryStore } from "../../store/library";
 import { usePlayerStore } from "../../store/player";
 import { usePlaylistsStore } from "../../store/playlists";
@@ -56,6 +55,14 @@ const AUDIO_TYPES = [
   "audio/flac",
   "audio/ogg",
 ];
+
+const SORT_LABELS: Record<SortOption, string> = {
+  date: "Last added",
+  title: "Title A → Z",
+  bpm: "BPM (slow → fast)",
+};
+
+const SORT_OPTIONS: SortOption[] = ["date", "title", "bpm"];
 
 function extFromName(name: string): string {
   const parts = name.split(".");
@@ -96,11 +103,66 @@ function contentTypeFromExt(ext: string): string {
   return map[ext] ?? "audio/mpeg";
 }
 
-const SORT_LABELS: Record<SortOption, string> = {
-  date: "Date Added",
-  title: "Title A–Z",
-  bpm: "BPM",
-};
+function formatDuration(seconds: number | null): string {
+  if (seconds == null) return "--:--";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+interface LibraryRowProps {
+  track: LibraryTrack;
+  onPress: () => void;
+  onMore: () => void;
+}
+
+const LibraryRow = memo(function LibraryRow({
+  track,
+  onPress,
+  onMore,
+}: LibraryRowProps) {
+  const bpm = track.originalBpm;
+  const duration = track.duration ?? 0;
+
+  return (
+    <Pressable
+      flat
+      onPress={onPress}
+      onLongPress={onMore}
+      delayLongPress={400}
+      accessibilityLabel={`${track.title}${track.artist ? `, ${track.artist}` : ""}`}
+      accessibilityRole="button"
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: space.md,
+        paddingVertical: space.sm,
+        paddingHorizontal: space.base,
+        borderBottomWidth: 1,
+        borderBottomColor: palette.paperEdge,
+      }}
+    >
+      <MiniTile title={track.title} size={36} />
+
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text variant="bodyStrong" numberOfLines={1}>
+          {track.artist ? `${track.artist}  ·  ` : ""}
+          {track.title}
+        </Text>
+        {bpm != null || duration > 0 ? (
+          <Text variant="caption" tone="muted" numberOfLines={1}>
+            {[
+              bpm != null ? `${Math.round(bpm)} BPM` : null,
+              duration > 0 ? formatDuration(duration) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+});
 
 export default function LibraryScreen() {
   const { userId } = useAuth();
@@ -116,19 +178,17 @@ export default function LibraryScreen() {
     deleteTrack,
   } = useLibraryStore();
 
+  const playlistList = usePlaylistsStore((s) => s.playlists);
+  const fetchPlaylists = usePlaylistsStore((s) => s.fetchPlaylists);
+
   const [importing, setImporting] = useState(false);
   const [editingTrack, setEditingTrack] = useState<Track | null>(null);
-  const [playlistPickerTrack, setPlaylistPickerTrack] = useState<Track | null>(null);
-  const [newPlaylistName, setNewPlaylistName] = useState("");
-  const [creatingPlaylist, setCreatingPlaylist] = useState(false);
+  const [pickerTrack, setPickerTrack] = useState<{ id: string; title: string } | null>(null);
+  const [contextTrack, setContextTrack] = useState<Track | null>(null);
+  const [sortSheetOpen, setSortSheetOpen] = useState(false);
+  const [moreSheetOpen, setMoreSheetOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
-
-  const {
-    playlists: playlistList,
-    fetchPlaylists,
-    addTracksToPlaylist,
-    createPlaylist,
-  } = usePlaylistsStore();
 
   useFocusEffect(
     useCallback(() => {
@@ -136,7 +196,7 @@ export default function LibraryScreen() {
         fetchTracks(userId);
         fetchPlaylists(userId);
       }
-    }, [userId]),
+    }, [userId, fetchTracks, fetchPlaylists]),
   );
 
   const handleImport = useCallback(async () => {
@@ -157,10 +217,8 @@ export default function LibraryScreen() {
 
     setImporting(true);
     try {
-      console.log("[import] hashing file…");
       const contentHash = await sha256OfFile(file.uri);
 
-      // Dedup: same bytes already in tracks?
       const [dupe] = await db
         .select()
         .from(tracks)
@@ -168,14 +226,11 @@ export default function LibraryScreen() {
 
       let track: Track;
       if (dupe) {
-        console.log(`[import] dedup hit: ${contentHash} → reusing track ${dupe.id}`);
         track = dupe as Track;
       } else {
         const fileKey = buildContentKey(contentHash, ext);
-        console.log("[import] generating presigned URL…");
         const uploadUrl = await getUploadUrl(fileKey, contentType);
 
-        console.log("[import] uploading to R2…");
         const uploadResult = await uploadAsync(uploadUrl, file.uri, {
           httpMethod: "PUT",
           headers: { "Content-Type": contentType },
@@ -186,7 +241,6 @@ export default function LibraryScreen() {
           throw new Error(`Upload failed with status ${uploadResult.status}`);
         }
 
-        console.log("[import] inserting tracks row…");
         const [inserted] = await db
           .insert(tracks)
           .values({
@@ -202,7 +256,6 @@ export default function LibraryScreen() {
         track = inserted as Track;
       }
 
-      console.log("[import] linking userTracks…");
       const [insertedLink] = await db
         .insert(userTracks)
         .values({ userId, trackId: track.id, originalBpm: null })
@@ -222,13 +275,13 @@ export default function LibraryScreen() {
         userTrackId: userTrack.id,
         addedAt: userTrack.addedAt,
         originalBpm: userTrack.originalBpm,
+        beatOffset: userTrack.beatOffset ?? null,
       };
 
       addTrack(libraryTrack);
       ensureLocalCopy(track, userId).catch((e) =>
         console.warn("[localAudio] import cache failed:", e?.message ?? e),
       );
-      console.log("[import] done!");
     } catch (err) {
       console.error("[import] error:", err);
       Alert.alert(
@@ -238,116 +291,7 @@ export default function LibraryScreen() {
     } finally {
       setImporting(false);
     }
-  }, [userId]);
-
-  function openPlaylistPicker(track: Track) {
-    if (userId) fetchPlaylists(userId);
-    setNewPlaylistName("");
-    setCreatingPlaylist(false);
-    setPlaylistPickerTrack(track);
-  }
-
-  async function handlePickPlaylist(playlistId: string, playlistName: string) {
-    if (!playlistPickerTrack) return;
-    const track = playlistPickerTrack;
-    setPlaylistPickerTrack(null);
-    const added = await addTracksToPlaylist(playlistId, [track.id]);
-    if (added > 0) {
-      Alert.alert("Added", `"${track.title}" added to ${playlistName}`);
-    } else {
-      Alert.alert("Already Added", `"${track.title}" is already in ${playlistName}`);
-    }
-  }
-
-  async function handleCreateAndAdd() {
-    const name = newPlaylistName.trim();
-    if (!name || !userId || !playlistPickerTrack) return;
-    setCreatingPlaylist(true);
-    try {
-      await createPlaylist(userId, name);
-      const created = usePlaylistsStore.getState().playlists.find(
-        (p) => p.name === name,
-      );
-      if (created) {
-        await handlePickPlaylist(created.id, created.name);
-      }
-    } finally {
-      setCreatingPlaylist(false);
-    }
-  }
-
-  function showTrackActions(track: Track) {
-    const options = [
-      "Play next",
-      "Add to queue",
-      "Add to Playlist",
-      "Edit Metadata",
-      "Delete",
-      "Cancel",
-    ];
-    const destructiveIndex = 4;
-    const cancelIndex = 5;
-
-    function handleAction(index: number) {
-      if (!userId) return;
-      if (index === 0) {
-        usePlayerStore.getState().playNext(track.id, userId);
-      } else if (index === 1) {
-        usePlayerStore.getState().addToQueue(track.id, userId);
-      } else if (index === 2) {
-        openPlaylistPicker(track);
-      } else if (index === 3) {
-        setEditingTrack(track);
-      } else if (index === 4) {
-        Alert.alert("Delete Track", `Delete "${track.title}"?`, [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Delete",
-            style: "destructive",
-            onPress: () => deleteTrack(track.id),
-          },
-        ]);
-      }
-    }
-
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options, destructiveButtonIndex: destructiveIndex, cancelButtonIndex: cancelIndex },
-        handleAction,
-      );
-    } else {
-      Alert.alert("Track Options", track.title, [
-        { text: "Play next", onPress: () => handleAction(0) },
-        { text: "Add to queue", onPress: () => handleAction(1) },
-        { text: "Add to Playlist", onPress: () => handleAction(2) },
-        { text: "Edit Metadata", onPress: () => handleAction(3) },
-        { text: "Delete", style: "destructive", onPress: () => handleAction(4) },
-        { text: "Cancel", style: "cancel" },
-      ]);
-    }
-  }
-
-  function showSortPicker() {
-    const options: SortOption[] = ["date", "title", "bpm"];
-    const labels = options.map((o) => SORT_LABELS[o]);
-    labels.push("Cancel");
-
-    function handleSort(index: number) {
-      if (index < options.length) setSort(options[index]!);
-    }
-
-    if (Platform.OS === "ios") {
-      ActionSheetIOS.showActionSheetWithOptions(
-        { options: labels, cancelButtonIndex: labels.length - 1 },
-        handleSort,
-      );
-    } else {
-      Alert.alert("Sort By", undefined, [
-        ...options.map((o, i) => ({ text: SORT_LABELS[o], onPress: () => handleSort(i) })),
-        { text: "Cancel", style: "cancel" as const },
-      ]);
-    }
-  }
+  }, [userId, addTrack]);
 
   const filteredTracks = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -359,96 +303,237 @@ export default function LibraryScreen() {
     });
   }, [trackList, search]);
 
-  const sections = useMemo(() => {
-    if (sort !== "date") return [{ title: "", data: filteredTracks }];
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const weekAgo = new Date(today.getTime() - 7 * 86400000);
+  const handleRowPress = useCallback(
+    (track: LibraryTrack) => {
+      if (!userId) return;
+      const idx = filteredTracks.findIndex((t) => t.id === track.id);
+      usePlayerStore
+        .getState()
+        .playWithQueue(filteredTracks, Math.max(0, idx), userId);
+    },
+    [userId, filteredTracks],
+  );
 
-    const groups: Record<string, LibraryTrack[]> = {};
-    const order: string[] = [];
-    for (const track of filteredTracks) {
-      const added = new Date(track.addedAt);
-      let label: string;
-      if (added >= today) label = "Today";
-      else if (added >= weekAgo) label = "This Week";
-      else label = "Earlier";
+  const handleRowMore = useCallback((track: Track) => {
+    setContextTrack(track);
+  }, []);
 
-      if (!groups[label]) {
-        groups[label] = [];
-        order.push(label);
-      }
-      groups[label]!.push(track);
-    }
-    return order.map((title) => ({ title, data: groups[title]! }));
-  }, [filteredTracks, sort]);
+  const sortActions = useMemo<ActionItem[]>(
+    () =>
+      SORT_OPTIONS.map((opt) => ({
+        icon:
+          opt === sort
+            ? ("checkmark" as const)
+            : ("ellipse-outline" as const),
+        label: SORT_LABELS[opt],
+        onPress: () => setSort(opt),
+      })),
+    [sort, setSort],
+  );
+
+  const moreActions = useMemo<ActionItem[]>(
+    () => [
+      {
+        icon: "add-outline",
+        label: importing ? "Importing…" : "Add track",
+        onPress: () => {
+          if (!importing) handleImport();
+        },
+      },
+    ],
+    [importing, handleImport],
+  );
+
+  const trackContextActions = useMemo<ActionItem[]>(() => {
+    if (!contextTrack || !userId) return [];
+    const t = contextTrack;
+    return [
+      {
+        icon: "play-skip-forward",
+        label: "Play next",
+        onPress: () => usePlayerStore.getState().playNext(t.id, userId),
+      },
+      {
+        icon: "list-outline",
+        label: "Add to queue",
+        onPress: () => usePlayerStore.getState().addToQueue(t.id, userId),
+      },
+      {
+        icon: "albums-outline",
+        label: "Add to playlist",
+        onPress: () => setPickerTrack({ id: t.id, title: t.title }),
+      },
+      {
+        icon: "create-outline",
+        label: "Edit metadata",
+        onPress: () => setEditingTrack(t),
+      },
+      {
+        icon: "trash-outline",
+        label: "Delete",
+        destructive: true,
+        onPress: () =>
+          Alert.alert("Delete Track", `Delete "${t.title}"?`, [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: () => deleteTrack(t.id),
+            },
+          ]),
+      },
+    ];
+  }, [contextTrack, userId, deleteTrack]);
 
   const trackCount = trackList.length;
-  const trackCountLabel = trackCount === 1 ? "1 track" : `${trackCount} tracks`;
-  const isSearching = search.trim().length > 0;
+  const playlistCount = playlistList.length;
 
-  const footer = (
-    <Surface tone="raised" rounded="none" pad="md" bordered>
-      <Button
-        label={importing ? "Importing" : "Add track"}
-        onPress={handleImport}
-        disabled={importing}
-        block
-        leading={
-          importing ? (
-            <ActivityIndicator color={palette.inkInverse} />
-          ) : (
-            <Ionicons name="add" size={20} color={palette.inkInverse} />
-          )
-        }
+  const renderRow = useCallback(
+    ({ item }: ListRenderItemInfo<LibraryTrack>) => (
+      <LibraryRow
+        track={item}
+        onPress={() => handleRowPress(item)}
+        onMore={() => handleRowMore(item)}
       />
-    </Surface>
+    ),
+    [handleRowPress, handleRowMore],
+  );
+
+  const keyExtractor = useCallback((item: LibraryTrack) => item.id, []);
+
+  const ListHeader = (
+    <View>
+      {/* Playlists strip */}
+      <View style={{ paddingTop: space.none, paddingBottom: space.md }}>
+        {playlistList.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{
+              paddingHorizontal: space.base,
+              gap: space.sm,
+            }}
+          >
+            {playlistList.map((pl) => (
+              <PlaylistCard
+                key={pl.id}
+                name={pl.name}
+                trackCount={pl.trackCount}
+                onPress={() => router.push(`/(tabs)/playlists/${pl.id}`)}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={{ paddingHorizontal: space.base }}>
+            <Text variant="caption" tone="faint">
+              No playlists yet — create one from the Playlists tab.
+            </Text>
+          </View>
+        )}
+      </View>
+
+      {/* Sort row */}
+      <View
+        style={{
+          borderBottomWidth: 1,
+          borderBottomColor: palette.paperEdge,
+        }}
+      >
+        <HStack
+          padX="base"
+          padY="sm"
+          align="center"
+          justify="end"
+        >
+          <Pressable
+            flat
+            onPress={() => setSortSheetOpen(true)}
+            accessibilityLabel="Change sort"
+            accessibilityRole="button"
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              paddingVertical: 4,
+              paddingHorizontal: 8,
+              borderRadius: radius.full,
+            }}
+          >
+            <Text variant="caption" tone="muted">
+              {SORT_LABELS[sort]}
+            </Text>
+            <Ionicons name="chevron-down" size={11} color={palette.inkMuted} />
+          </Pressable>
+        </HStack>
+      </View>
+    </View>
   );
 
   return (
-    <Screen scroll={false} footer={footer}>
-      <VStack flex gap="lg">
-        <VStack gap="xs">
-          <Text variant="eyebrow" tone="muted">
-            Your library
+    <Screen scroll={false} inset={false}>
+      <VStack flex>
+        {/* Big-title app bar */}
+        <HStack
+          padX="base"
+          align="center"
+          justify="between"
+          style={{ paddingTop: space.md, paddingBottom: space.md }}
+        >
+          <Text
+            variant="titleLg"
+            style={{ fontSize: 30, letterSpacing: -0.6 }}
+          >
+            Library
           </Text>
-          <HStack justify="between" align="center">
-            <Text variant="titleLg">
-              {trackCount > 0 ? trackCountLabel : "Library"}
-            </Text>
-            {trackList.length > 0 ? (
-              <Button
-                label={SORT_LABELS[sort]}
-                variant="secondary"
-                size="sm"
-                onPress={showSortPicker}
-                leading={
-                  <Ionicons name="swap-vertical" size={14} color={palette.ink} />
-                }
-              />
-            ) : null}
+          <HStack gap="xs">
+            <IconButton
+              icon={searchOpen ? "close-outline" : "search-outline"}
+              accessibilityLabel={searchOpen ? "Close search" : "Search"}
+              size={20}
+              onPress={() => {
+                setSearchOpen((v) => {
+                  if (v) setSearch("");
+                  return !v;
+                });
+              }}
+            />
+            <IconButton
+              icon="ellipsis-horizontal"
+              accessibilityLabel="More"
+              size={20}
+              onPress={() => setMoreSheetOpen(true)}
+            />
           </HStack>
-        </VStack>
+        </HStack>
 
-        {trackList.length > 0 ? (
-          <Input
-            variant="search"
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search title or artist..."
-            autoCorrect={false}
-            autoCapitalize="none"
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-          />
+        {/* Optional search input */}
+        {searchOpen ? (
+          <View
+            style={{
+              paddingHorizontal: space.base,
+              paddingBottom: space.md,
+            }}
+          >
+            <Input
+              variant="search"
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search title or artist..."
+              autoCorrect={false}
+              autoCapitalize="none"
+              autoFocus
+              returnKeyType="search"
+            />
+          </View>
         ) : null}
 
+        {/* Body */}
         {isLoading ? (
           <VStack flex justify="center" align="center">
             <ActivityIndicator color={palette.ink} size="large" />
           </VStack>
         ) : trackList.length === 0 ? (
-          <VStack flex justify="center" align="center" gap="sm">
+          <VStack flex justify="center" align="center" gap="sm" padX="base">
             <Ionicons
               name="musical-notes-outline"
               size={48}
@@ -458,55 +543,56 @@ export default function LibraryScreen() {
               No tracks yet
             </Text>
             <Text variant="body" tone="muted" align="center">
-              Tap Add track to import audio files
-            </Text>
-          </VStack>
-        ) : filteredTracks.length === 0 ? (
-          <VStack flex justify="center" align="center" gap="sm">
-            <Ionicons
-              name="search-outline"
-              size={40}
-              color={palette.inkFaint}
-            />
-            <Text variant="title" align="center">
-              No matches
-            </Text>
-            <Text variant="body" tone="muted" align="center">
-              Nothing matches "{search.trim()}"
+              Tap the more menu to import audio files.
             </Text>
           </VStack>
         ) : (
-          <SectionList
-            sections={sections}
-            keyExtractor={(item) => item.id}
-            renderSectionHeader={({ section: { title } }) =>
-              title ? (
-                <View style={{ paddingTop: space.lg, paddingBottom: space.sm }}>
-                  <Text variant="eyebrow" tone="muted">
-                    {title}
-                  </Text>
-                </View>
-              ) : null
+          <FlatList
+            data={filteredTracks}
+            keyExtractor={keyExtractor}
+            renderItem={renderRow}
+            ListHeaderComponent={ListHeader}
+            ListEmptyComponent={
+              <VStack padY="xl" align="center" gap="sm">
+                <Ionicons
+                  name="search-outline"
+                  size={32}
+                  color={palette.inkFaint}
+                />
+                <Text variant="caption" tone="muted">
+                  Nothing matches "{search.trim()}"
+                </Text>
+              </VStack>
             }
-            renderItem={({ item }) => (
-              <TrackItem
-                track={item}
-                onPress={() => {
-                  if (!userId) return;
-                  const idx = trackList.findIndex((t) => t.id === item.id);
-                  usePlayerStore
-                    .getState()
-                    .playWithQueue(trackList, Math.max(0, idx), userId);
-                }}
-                onLongPress={() => showTrackActions(item)}
-              />
-            )}
-            ItemSeparatorComponent={() => <Divider indent={64} inset="none" />}
-            contentContainerStyle={{ paddingBottom: space.xl }}
-            stickySectionHeadersEnabled={false}
+            contentContainerStyle={{ paddingBottom: space["2xl"] }}
             showsVerticalScrollIndicator={false}
+            initialNumToRender={14}
+            maxToRenderPerBatch={10}
+            windowSize={9}
           />
         )}
+      </VStack>
+
+      <ActionSheet
+        visible={sortSheetOpen}
+        onClose={() => setSortSheetOpen(false)}
+        title="Sort by"
+        actions={sortActions}
+      />
+
+      <ActionSheet
+        visible={moreSheetOpen}
+        onClose={() => setMoreSheetOpen(false)}
+        actions={moreActions}
+      />
+
+      <ActionSheet
+        visible={contextTrack != null}
+        onClose={() => setContextTrack(null)}
+        title={contextTrack?.title}
+        subtitle={contextTrack?.artist ?? undefined}
+        actions={trackContextActions}
+      />
 
       <EditTrackModal
         track={editingTrack}
@@ -517,73 +603,11 @@ export default function LibraryScreen() {
         }}
       />
 
-      <Modal
-        visible={playlistPickerTrack != null}
-        animationType="slide"
-        presentationStyle="formSheet"
-        onRequestClose={() => setPlaylistPickerTrack(null)}
-      >
-        <Screen scroll={false}>
-          <VStack flex gap="lg">
-            <AppBar
-              title="Add to Playlist"
-              onBack={() => setPlaylistPickerTrack(null)}
-            />
-
-            <HStack gap="sm">
-              <View style={{ flex: 1 }}>
-                <Input
-                  value={newPlaylistName}
-                  onChangeText={setNewPlaylistName}
-                  placeholder="New playlist name..."
-                  returnKeyType="done"
-                  onSubmitEditing={handleCreateAndAdd}
-                />
-              </View>
-              <Button
-                label={creatingPlaylist ? "Creating" : "Create"}
-                onPress={handleCreateAndAdd}
-                disabled={!newPlaylistName.trim() || creatingPlaylist}
-                leading={
-                  creatingPlaylist ? (
-                    <ActivityIndicator color={palette.inkInverse} size="small" />
-                  ) : null
-                }
-              />
-            </HStack>
-
-            <FlatList
-              data={playlistList}
-              keyExtractor={(item) => item.id}
-              ListEmptyComponent={
-                <VStack padY="xl" align="center">
-                  <Text variant="body" tone="muted">
-                    No playlists yet
-                  </Text>
-                </VStack>
-              }
-              renderItem={({ item }) => (
-                <Pressable
-                  flat
-                  onPress={() => handlePickPlaylist(item.id, item.name)}
-                  android_ripple={{ color: palette.paperSunken }}
-                >
-                  <HStack justify="between" padY="md">
-                    <Text variant="bodyStrong">{item.name}</Text>
-                    <Text variant="caption" tone="muted">
-                      {item.trackCount}{" "}
-                      {item.trackCount === 1 ? "track" : "tracks"}
-                    </Text>
-                  </HStack>
-                </Pressable>
-              )}
-              ItemSeparatorComponent={() => <Divider inset="none" />}
-              showsVerticalScrollIndicator={false}
-            />
-          </VStack>
-        </Screen>
-      </Modal>
-      </VStack>
+      <PlaylistPickerSheet
+        visible={pickerTrack != null}
+        track={pickerTrack}
+        onClose={() => setPickerTrack(null)}
+      />
     </Screen>
   );
 }
