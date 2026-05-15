@@ -1,50 +1,37 @@
-import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert } from "react-native";
+import { useAuth } from "@clerk/clerk-expo";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Updates from "expo-updates";
-import { useAuth } from "@clerk/clerk-expo";
-import { backfillLocalCache, clearLocalCache, getCacheSizeBytes } from "../../lib/localAudio";
-import { type DiscogsSyncStatus, useDiscogsSyncStore } from "../../store/discogsSync";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Button,
-  ContentBlock,
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  View,
+} from "react-native";
+import {
   HStack,
-  Inline,
-  PageSection,
+  SettingsRow,
   Screen,
-  Surface,
   Text,
   VStack,
   palette,
-  radius,
+  space,
 } from "../../components/ui";
-import { View } from "react-native";
-
-function StatusDot({ tone }: { tone: "positive" | "warning" | "critical" | "muted" }) {
-  const color =
-    tone === "positive"
-      ? palette.positive
-      : tone === "warning"
-        ? palette.warning
-        : tone === "critical"
-          ? palette.critical
-          : palette.inkFaint;
-  return (
-    <View
-      style={{
-        width: 8,
-        height: 8,
-        borderRadius: radius.full,
-        backgroundColor: color,
-      }}
-    />
-  );
-}
+import {
+  backfillLocalCache,
+  clearLocalCache,
+  getCacheSizeBytes,
+} from "../../lib/localAudio";
+import {
+  type DiscogsSyncStatus,
+  useDiscogsSyncStore,
+} from "../../store/discogsSync";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-type StatusInfo = { text: string; tone: "muted" | "ok" | "error" };
+type StatusTone = "muted" | "ok" | "error";
+type StatusInfo = { text: string; tone: StatusTone };
 
 function describeDiscogsStatus(status: DiscogsSyncStatus): StatusInfo | null {
   switch (status.state) {
@@ -52,7 +39,7 @@ function describeDiscogsStatus(status: DiscogsSyncStatus): StatusInfo | null {
       return null;
     case "running":
       if (status.phase === "starting") {
-        return { text: "Starting sync...", tone: "muted" };
+        return { text: "Starting sync…", tone: "muted" };
       }
       return {
         text: `Syncing ${status.phase}: ${status[status.phase]}`,
@@ -60,7 +47,9 @@ function describeDiscogsStatus(status: DiscogsSyncStatus): StatusInfo | null {
       };
     case "done":
       return {
-        text: `Synced ${status.collection} + ${status.wantlist} in ${(status.durationMs / 1000).toFixed(1)}s`,
+        text: `Synced ${status.collection} + ${status.wantlist} in ${(
+          status.durationMs / 1000
+        ).toFixed(1)}s`,
         tone: "ok",
       };
     case "error":
@@ -68,22 +57,90 @@ function describeDiscogsStatus(status: DiscogsSyncStatus): StatusInfo | null {
   }
 }
 
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
+  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <View
+      style={{
+        paddingHorizontal: space.base,
+        paddingTop: space.lg,
+        paddingBottom: space.xs,
+      }}
+    >
+      <Text variant="eyebrow" tone="muted">
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function SectionGroup({ children }: { children: React.ReactNode }) {
+  return (
+    <View
+      style={{
+        paddingHorizontal: space.base,
+        borderTopWidth: 1,
+        borderTopColor: palette.paperEdge,
+      }}
+    >
+      {children}
+    </View>
+  );
+}
+
+function StatusLine({
+  text,
+  tone,
+}: {
+  text: string;
+  tone: "muted" | "positive" | "warning" | "critical";
+}) {
+  return (
+    <View
+      style={{
+        paddingHorizontal: space.base,
+        paddingTop: space.xs,
+        paddingBottom: space.sm,
+      }}
+    >
+      <Text variant="caption" tone={tone}>
+        {text}
+      </Text>
+    </View>
+  );
+}
+
 export default function SettingsScreen() {
   const { getToken, signOut, userId } = useAuth();
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
+
   const [cookieStatus, setCookieStatus] = useState<boolean | null>(null);
   const [uploading, setUploading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [isError, setIsError] = useState(false);
-  const [checking, setChecking] = useState(false);
-  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
-  const [updateError, setUpdateError] = useState(false);
+  const [cookieMessage, setCookieMessage] = useState<{
+    text: string;
+    error: boolean;
+  } | null>(null);
+
   const [cacheBytes, setCacheBytes] = useState(0);
   const [clearing, setClearing] = useState(false);
   const [downloading, setDownloading] = useState(false);
+
   const [syncStarting, setSyncStarting] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+
+  const [checking, setChecking] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<{
+    text: string;
+    error: boolean;
+  } | null>(null);
+
   const discogsCounts = useDiscogsSyncStore((s) => s.counts);
   const discogsCountsLoading = useDiscogsSyncStore((s) => s.countsLoading);
   const discogsStatus = useDiscogsSyncStore((s) => s.status);
@@ -96,7 +153,93 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     refreshCacheSize();
+    checkCookieStatus();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      const token = await getTokenRef.current();
+      if (token) await fetchDiscogsCounts(token);
+    })();
+  }, [fetchDiscogsCounts]);
+
+  useEffect(() => {
+    if (discogsStatus.state !== "done") return;
+    (async () => {
+      const token = await getTokenRef.current();
+      if (token) await fetchDiscogsCounts(token);
+    })();
+  }, [discogsStatus.state, fetchDiscogsCounts]);
+
+  async function checkCookieStatus() {
+    if (!API_URL) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/cookies`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setCookieStatus(data.loaded ?? false);
+    } catch {
+      setCookieStatus(false);
+    }
+  }
+
+  async function handleUploadCookies() {
+    if (!API_URL) {
+      Alert.alert("Error", "API URL not configured");
+      return;
+    }
+    const result = await DocumentPicker.getDocumentAsync({
+      type: "text/plain",
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    const file = result.assets[0]!;
+    setUploading(true);
+    setCookieMessage(null);
+
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Not authenticated");
+
+      await FileSystem.readAsStringAsync(file.uri);
+
+      const formData = new FormData();
+      formData.append("cookies", {
+        uri: file.uri,
+        name: file.name || "cookies.txt",
+        type: "text/plain",
+      } as unknown as Blob);
+
+      const res = await fetch(`${API_URL}/cookies`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setCookieStatus(false);
+        setCookieMessage({
+          text: data.error || "Upload failed",
+          error: true,
+        });
+      } else {
+        setCookieStatus(true);
+        setCookieMessage({ text: "Cookies uploaded.", error: false });
+      }
+    } catch (err) {
+      setCookieMessage({
+        text: err instanceof Error ? err.message : "Network error — upload failed",
+        error: true,
+      });
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handleClearCache() {
     if (!userId) return;
@@ -133,56 +276,6 @@ export default function SettingsScreen() {
     }
   }
 
-  function formatBytes(n: number): string {
-    if (n < 1024) return `${n} B`;
-    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-    if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-    return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
-  }
-
-  async function checkForUpdate() {
-    setChecking(true);
-    setUpdateMessage(null);
-    setUpdateError(false);
-    try {
-      const result = await Updates.checkForUpdateAsync();
-      if (!result.isAvailable) {
-        setUpdateMessage("You're on the latest update.");
-      } else {
-        setUpdateMessage("Downloading update...");
-        await Updates.fetchUpdateAsync();
-        setUpdateMessage("Update ready — reloading...");
-        setTimeout(() => Updates.reloadAsync(), 500);
-      }
-    } catch (e) {
-      setUpdateError(true);
-      setUpdateMessage(
-        e instanceof Error ? e.message : "Update check failed",
-      );
-    } finally {
-      setChecking(false);
-    }
-  }
-
-  useEffect(() => {
-    checkCookieStatus();
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      const token = await getTokenRef.current();
-      if (token) await fetchDiscogsCounts(token);
-    })();
-  }, [fetchDiscogsCounts]);
-
-  useEffect(() => {
-    if (discogsStatus.state !== "done") return;
-    (async () => {
-      const token = await getTokenRef.current();
-      if (token) await fetchDiscogsCounts(token);
-    })();
-  }, [discogsStatus.state, fetchDiscogsCounts]);
-
   async function handleDiscogsSync(opts: { incremental?: boolean }) {
     setSyncStarting(true);
     setSyncError(null);
@@ -199,332 +292,241 @@ export default function SettingsScreen() {
     }
   }
 
-  const discogsStatusInfo = describeDiscogsStatus(discogsStatus);
-
-  async function checkCookieStatus() {
-    if (!API_URL) return;
-    const token = await getToken();
-    if (!token) return;
-
+  async function checkForUpdate() {
+    setChecking(true);
+    setUpdateMessage(null);
     try {
-      const res = await fetch(`${API_URL}/cookies`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await res.json();
-      setCookieStatus(data.loaded ?? false);
-    } catch {
-      setCookieStatus(false);
-    }
-  }
-
-  async function handleUploadCookies() {
-    if (!API_URL) {
-      Alert.alert("Error", "API URL not configured");
-      return;
-    }
-
-    const result = await DocumentPicker.getDocumentAsync({
-      type: "text/plain",
-      copyToCacheDirectory: true,
-    });
-
-    if (result.canceled || result.assets.length === 0) return;
-
-    const file = result.assets[0]!;
-    setUploading(true);
-    setStatusMessage(null);
-    setIsError(false);
-
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("Not authenticated");
-
-      const fileContent = await FileSystem.readAsStringAsync(file.uri);
-
-      const formData = new FormData();
-      formData.append("cookies", {
-        uri: file.uri,
-        name: file.name || "cookies.txt",
-        type: "text/plain",
-      } as unknown as Blob);
-
-      const res = await fetch(`${API_URL}/cookies`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setIsError(true);
-        setStatusMessage(data.error || "Upload failed");
-        setCookieStatus(false);
+      const result = await Updates.checkForUpdateAsync();
+      if (!result.isAvailable) {
+        setUpdateMessage({ text: "You're on the latest update.", error: false });
       } else {
-        setCookieStatus(true);
-        setStatusMessage("Cookies uploaded successfully");
+        setUpdateMessage({ text: "Downloading update…", error: false });
+        await Updates.fetchUpdateAsync();
+        setUpdateMessage({ text: "Update ready — reloading…", error: false });
+        setTimeout(() => Updates.reloadAsync(), 500);
       }
-    } catch (err) {
-      setIsError(true);
-      setStatusMessage(
-        err instanceof Error ? err.message : "Network error — upload failed",
-      );
+    } catch (e) {
+      setUpdateMessage({
+        text: e instanceof Error ? e.message : "Update check failed",
+        error: true,
+      });
     } finally {
-      setUploading(false);
+      setChecking(false);
     }
   }
 
-  const statusTone = (tone: StatusInfo["tone"]) => {
-    if (tone === "ok") return "positive" as const;
-    if (tone === "error") return "critical" as const;
-    return "muted" as const;
-  };
-
-  const cookieDot: React.ReactNode =
-    cookieStatus === null ? (
-      <StatusDot tone="muted" />
-    ) : cookieStatus ? (
-      <StatusDot tone="positive" />
-    ) : (
-      <StatusDot tone="warning" />
-    );
-
-  const cookieStatusText =
+  // Derived display values
+  const cookieValue =
     cookieStatus === null
-      ? "Checking..."
+      ? "Checking…"
       : cookieStatus
-        ? "Cookies loaded"
-        : "No cookies — downloads may fail";
+        ? "Loaded"
+        : "Missing";
+  const cookieValueTone: "muted" | "positive" | "warning" =
+    cookieStatus === null ? "muted" : cookieStatus ? "positive" : "warning";
 
-  const cookieStatusTone =
-    cookieStatus === null
-      ? "muted"
-      : cookieStatus
-        ? "positive"
-        : "warning";
+  const discogsValue = useMemo(() => {
+    if (discogsCountsLoading && !discogsCounts) return "Checking…";
+    if (!discogsCounts) return "Not synced";
+    return `${discogsCounts.collection} · ${discogsCounts.wantlist}`;
+  }, [discogsCounts, discogsCountsLoading]);
+
+  const discogsStatusInfo = describeDiscogsStatus(discogsStatus);
+  const syncing = discogsStatus.state === "running";
 
   return (
-    <Screen>
-      <VStack gap="xl">
-        <VStack gap="xs">
-          <Text variant="eyebrow" tone="muted">
-            Configuration
+    <Screen scroll={false} inset={false}>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: space["2xl"] }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Big-title */}
+        <View
+          style={{
+            paddingHorizontal: space.base,
+            paddingTop: space.md,
+            paddingBottom: space.md,
+          }}
+        >
+          <Text
+            variant="titleLg"
+            style={{ fontSize: 30, letterSpacing: -0.6 }}
+          >
+            Settings
           </Text>
-          <Text variant="titleLg">Settings</Text>
-        </VStack>
+        </View>
 
-        <PageSection eyebrow="YouTube" title="Cookies">
-          <Surface tone="raised" rounded="lg" pad="lg" bordered>
-            <ContentBlock>
-              <Text variant="body" tone="muted">
-                Upload a cookies.txt file from your browser to authenticate
-                YouTube downloads. Use an extension like "Get cookies.txt
-                LOCALLY" to export them.
-              </Text>
-
-              <Inline>
-                <Text variant="body" tone="muted">Status</Text>
-                <HStack gap="sm" align="center">
-                  {cookieDot}
-                  <Text variant="bodyStrong" tone={cookieStatusTone}>
-                    {cookieStatusText}
-                  </Text>
-                </HStack>
-              </Inline>
-
-              <Button
-                label={uploading ? "Uploading" : "Upload cookies.txt"}
-                onPress={handleUploadCookies}
-                disabled={uploading}
-                leading={
-                  uploading ? (
-                    <ActivityIndicator color={palette.inkInverse} size="small" />
-                  ) : null
-                }
-              />
-
-              {statusMessage && (
-                <Text
-                  variant="caption"
-                  tone={isError ? "critical" : "positive"}
-                  align="center"
-                >
-                  {statusMessage}
-                </Text>
-              )}
-            </ContentBlock>
-          </Surface>
-        </PageSection>
-
-        <PageSection eyebrow="Storage" title="Local audio">
-          <Surface tone="raised" rounded="lg" pad="lg" bordered>
-            <ContentBlock>
-              <Text variant="body" tone="muted">
-                Tracks download to this device so playback starts instantly.
-                New tracks download in the background.
-              </Text>
-              <Inline>
-                <Text variant="body" tone="muted">Used</Text>
-                <Text variant="bodyStrong" tone="primary">
-                  {formatBytes(cacheBytes)}
-                </Text>
-              </Inline>
-              <HStack gap="md">
-                <Button
-                  label={downloading ? "Downloading" : "Download all"}
-                  size="sm"
-                  onPress={handleDownloadAll}
-                  disabled={downloading}
-                  leading={
-                    downloading ? (
-                      <ActivityIndicator color={palette.inkInverse} size="small" />
-                    ) : null
+        {/* YouTube */}
+        <SectionHeader label="YouTube" />
+        <SectionGroup>
+          <SettingsRow
+            title="Cookies"
+            subtitle="Upload a cookies.txt to authenticate downloads"
+            onPress={uploading ? undefined : handleUploadCookies}
+            trailing={
+              uploading
+                ? {
+                    type: "value",
+                    value: "Uploading…",
                   }
-                />
-                <Button
-                  label={clearing ? "Clearing" : "Clear cache"}
-                  size="sm"
-                  variant="destructive"
-                  onPress={handleClearCache}
-                  disabled={clearing}
-                  leading={
-                    clearing ? (
-                      <ActivityIndicator color={palette.inkInverse} size="small" />
-                    ) : null
+                : {
+                    type: "value",
+                    value: cookieValue,
                   }
-                />
-              </HStack>
-            </ContentBlock>
-          </Surface>
-        </PageSection>
-
-        <PageSection eyebrow="Discogs" title="Sync">
-          <Surface tone="raised" rounded="lg" pad="lg" bordered>
-            <ContentBlock>
-              <Text variant="body" tone="muted">
-                Mirror your Discogs collection and wantlist locally so search
-                and auto-match are instant. Full sync rebuilds; quick sync only
-                fetches recent additions.
-              </Text>
-              <Inline align="start">
-                <Text variant="body" tone="muted">Local mirror</Text>
-                <HStack gap="sm" align="center">
-                  {discogsCountsLoading && !discogsCounts ? (
-                    <>
-                      <StatusDot tone="muted" />
-                      <Text variant="caption" tone="muted">Checking...</Text>
-                    </>
-                  ) : discogsCounts ? (
-                    <>
-                      <StatusDot tone="positive" />
-                      <Text variant="caption" tone="positive">
-                        {discogsCounts.collection} · {discogsCounts.wantlist}
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <StatusDot tone="warning" />
-                      <Text variant="caption" tone="warning">Not synced</Text>
-                    </>
-                  )}
-                </HStack>
-              </Inline>
-              <HStack gap="md">
-                <Button
-                  label="Full sync"
-                  size="sm"
-                  onPress={() => handleDiscogsSync({ incremental: false })}
-                  disabled={syncStarting || discogsStatus.state === "running"}
-                  leading={
-                    syncStarting && discogsStatus.state !== "running" ? (
-                      <ActivityIndicator color={palette.inkInverse} size="small" />
-                    ) : null
-                  }
-                />
-                <Button
-                  label="Quick sync"
-                  size="sm"
-                  variant="secondary"
-                  onPress={() => handleDiscogsSync({ incremental: true })}
-                  disabled={syncStarting || discogsStatus.state === "running"}
-                />
-              </HStack>
-              {discogsStatusInfo && (
-                <Text
-                  variant="caption"
-                  tone={statusTone(discogsStatusInfo.tone)}
-                  align="center"
-                >
-                  {discogsStatusInfo.text}
-                </Text>
-              )}
-              {syncError && (
-                <Text variant="caption" tone="critical" align="center">
-                  {syncError}
-                </Text>
-              )}
-            </ContentBlock>
-          </Surface>
-        </PageSection>
-
-        <PageSection eyebrow="App" title="Version">
-          <Surface tone="raised" rounded="lg" pad="lg" bordered>
-            <ContentBlock>
-              <Inline>
-                <Text variant="body" tone="muted">Update</Text>
-                <Text variant="numeric" tone="primary">
-                  {Updates.updateId ? Updates.updateId.slice(0, 8) : "embedded"}
-                </Text>
-              </Inline>
-              <Inline>
-                <Text variant="body" tone="muted">Channel</Text>
-                <Text variant="numeric" tone="primary">
-                  {Updates.channel || "—"}
-                </Text>
-              </Inline>
-              <Inline>
-                <Text variant="body" tone="muted">Created</Text>
-                <Text variant="numeric" tone="primary">
-                  {Updates.createdAt
-                    ? Updates.createdAt.toISOString().slice(0, 10)
-                    : "—"}
-                </Text>
-              </Inline>
-              <Button
-                label={checking ? "Checking" : "Check for updates"}
-                size="sm"
-                onPress={checkForUpdate}
-                disabled={checking}
-                leading={
-                  checking ? (
-                    <ActivityIndicator color={palette.inkInverse} size="small" />
-                  ) : null
-                }
-              />
-              {updateMessage && (
-                <Text
-                  variant="caption"
-                  tone={updateError ? "critical" : "positive"}
-                  align="center"
-                >
-                  {updateMessage}
-                </Text>
-              )}
-            </ContentBlock>
-          </Surface>
-        </PageSection>
-
-        <PageSection>
-          <Button
-            label="Sign Out"
-            variant="destructive"
-            onPress={() => signOut()}
-            block
+            }
           />
-        </PageSection>
-      </VStack>
+        </SectionGroup>
+        {cookieMessage ? (
+          <StatusLine
+            text={cookieMessage.text}
+            tone={cookieMessage.error ? "critical" : "positive"}
+          />
+        ) : cookieValueTone === "warning" ? (
+          <StatusLine
+            text="Downloads will fail until cookies are uploaded."
+            tone="warning"
+          />
+        ) : null}
+
+        {/* Storage */}
+        <SectionHeader label="Storage" />
+        <SectionGroup>
+          <SettingsRow
+            title="Local audio"
+            subtitle="Tracks cached on this device for instant playback"
+            trailing={{ type: "value", value: formatBytes(cacheBytes) }}
+          />
+          <SettingsRow
+            title={downloading ? "Downloading…" : "Download all tracks"}
+            onPress={downloading ? undefined : handleDownloadAll}
+            trailing={
+              downloading
+                ? undefined
+                : { type: "chevron" }
+            }
+          />
+          <SettingsRow
+            title={clearing ? "Clearing…" : "Clear cache"}
+            tone="destructive"
+            onPress={clearing ? undefined : handleClearCache}
+          />
+        </SectionGroup>
+
+        {/* Discogs */}
+        <SectionHeader label="Discogs" />
+        <SectionGroup>
+          <SettingsRow
+            title="Local mirror"
+            subtitle="Collection · Wantlist (cached locally)"
+            trailing={{ type: "value", value: discogsValue }}
+          />
+          <SettingsRow
+            title={syncing && !syncStarting ? "Syncing…" : "Full sync"}
+            subtitle="Rebuilds the local mirror from scratch"
+            onPress={
+              syncStarting || syncing
+                ? undefined
+                : () => handleDiscogsSync({ incremental: false })
+            }
+            trailing={
+              syncStarting || syncing
+                ? undefined
+                : { type: "chevron" }
+            }
+          />
+          <SettingsRow
+            title="Quick sync"
+            subtitle="Fetches recent additions only"
+            onPress={
+              syncStarting || syncing
+                ? undefined
+                : () => handleDiscogsSync({ incremental: true })
+            }
+            trailing={
+              syncStarting || syncing
+                ? undefined
+                : { type: "chevron" }
+            }
+          />
+        </SectionGroup>
+        {discogsStatusInfo ? (
+          <StatusLine
+            text={discogsStatusInfo.text}
+            tone={
+              discogsStatusInfo.tone === "ok"
+                ? "positive"
+                : discogsStatusInfo.tone === "error"
+                  ? "critical"
+                  : "muted"
+            }
+          />
+        ) : null}
+        {syncError ? <StatusLine text={syncError} tone="critical" /> : null}
+
+        {/* App */}
+        <SectionHeader label="App" />
+        <SectionGroup>
+          <SettingsRow
+            title="Version"
+            trailing={{
+              type: "value",
+              value: Updates.updateId
+                ? Updates.updateId.slice(0, 8)
+                : "embedded",
+            }}
+          />
+          <SettingsRow
+            title="Channel"
+            trailing={{ type: "value", value: Updates.channel || "—" }}
+          />
+          <SettingsRow
+            title="Created"
+            trailing={{
+              type: "value",
+              value: Updates.createdAt
+                ? Updates.createdAt.toISOString().slice(0, 10)
+                : "—",
+            }}
+          />
+          <SettingsRow
+            title={checking ? "Checking…" : "Check for updates"}
+            onPress={checking ? undefined : checkForUpdate}
+            trailing={checking ? undefined : { type: "chevron" }}
+          />
+        </SectionGroup>
+        {updateMessage ? (
+          <StatusLine
+            text={updateMessage.text}
+            tone={updateMessage.error ? "critical" : "positive"}
+          />
+        ) : null}
+
+        {/* Account */}
+        <SectionHeader label="Account" />
+        <SectionGroup>
+          <SettingsRow
+            title="Sign out"
+            tone="destructive"
+            onPress={() => signOut()}
+          />
+        </SectionGroup>
+
+        {/* Inline activity indicator overlay for long actions */}
+        {uploading || downloading || clearing || syncStarting ? (
+          <HStack
+            padX="base"
+            padY="md"
+            align="center"
+            gap="sm"
+            justify="center"
+          >
+            <ActivityIndicator size="small" color={palette.ink} />
+            <Text variant="caption" tone="muted">
+              Working…
+            </Text>
+          </HStack>
+        ) : null}
+      </ScrollView>
     </Screen>
   );
 }
