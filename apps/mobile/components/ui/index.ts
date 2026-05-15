@@ -50,6 +50,7 @@ export { WaveformScrubber } from "./WaveformScrubber";
 export { ActionSheet, type ActionItem } from "./ActionSheet";
 export { Eq } from "./Eq";
 export { MiniTile } from "./MiniTile";
+export { PlaylistCard } from "./PlaylistCard";
 
 // Token re-exports — for the rare case a primitive consumer needs a literal.
 // Prefer typed props on primitives over reaching for these.
