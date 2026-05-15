@@ -2,21 +2,31 @@ import type { Track } from "@aani/types";
 import { useAuth } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Modal, View } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  FlatList,
+  Modal,
+  View,
+  type ListRenderItemInfo,
+} from "react-native";
+import {
+  ActionSheet,
+  type ActionItem,
   AppBar,
   Button,
   Divider,
   HStack,
   IconButton,
   Input,
-  ListRow,
+  MiniTile,
   Pressable,
   Screen,
   Text,
   VStack,
   palette,
+  radius,
   space,
 } from "../../../components/ui";
 import { useLibraryStore } from "../../../store/library";
@@ -24,6 +34,70 @@ import { usePlayerStore } from "../../../store/player";
 import { usePlaylistsStore } from "../../../store/playlists";
 
 type PlaylistTrackItem = Track & { playlistTrackId: string; position: number };
+
+function formatDuration(seconds: number | null): string {
+  if (seconds == null) return "--:--";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+function formatTotal(seconds: number): string {
+  if (!seconds) return "0 min";
+  const totalMin = Math.round(seconds / 60);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}
+
+interface RowProps {
+  track: PlaylistTrackItem;
+  onPress: () => void;
+  onMore: () => void;
+}
+
+const Row = memo(function Row({ track, onPress, onMore }: RowProps) {
+  const bpm = (track as PlaylistTrackItem & { originalBpm?: number | null }).originalBpm;
+  const duration = track.duration ?? 0;
+  return (
+    <Pressable
+      flat
+      onPress={onPress}
+      onLongPress={onMore}
+      delayLongPress={400}
+      accessibilityLabel={`${track.title}${track.artist ? `, ${track.artist}` : ""}`}
+      accessibilityRole="button"
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: space.md,
+        paddingVertical: space.sm,
+        paddingHorizontal: space.base,
+        borderBottomWidth: 1,
+        borderBottomColor: palette.paperEdge,
+      }}
+    >
+      <MiniTile title={track.title} size={36} />
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text variant="bodyStrong" numberOfLines={1}>
+          {track.artist ? `${track.artist}  ·  ` : ""}
+          {track.title}
+        </Text>
+        {bpm != null || duration > 0 ? (
+          <Text variant="caption" tone="muted" numberOfLines={1}>
+            {[
+              bpm != null ? `${Math.round(bpm)} BPM` : null,
+              duration > 0 ? formatDuration(duration) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </Text>
+        ) : null}
+      </View>
+    </Pressable>
+  );
+});
 
 export default function PlaylistDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -37,6 +111,7 @@ export default function PlaylistDetailScreen() {
     removeTrackFromPlaylist,
     reorderTrack,
     renamePlaylist,
+    deletePlaylist,
   } = usePlaylistsStore();
   const libraryTracks = useLibraryStore((s) => s.tracks);
   const fetchLibraryTracks = useLibraryStore((s) => s.fetchTracks);
@@ -49,6 +124,11 @@ export default function PlaylistDetailScreen() {
   const [showPicker, setShowPicker] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState("");
+  const [contextTrack, setContextTrack] = useState<{
+    track: PlaylistTrackItem;
+    index: number;
+  } | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const loadTracks = useCallback(async () => {
     if (!id) return;
@@ -62,36 +142,38 @@ export default function PlaylistDetailScreen() {
     loadTracks();
   }, [loadTracks]);
 
-  function handleTrackPress(trackId: string) {
+  function handleTrackPress(index: number) {
     if (id) setPlaylistContext(id);
     if (!userId) return;
-    const idx = tracks.findIndex((t) => t.id === trackId);
-    usePlayerStore
-      .getState()
-      .playWithQueue(tracks, Math.max(0, idx), userId);
+    usePlayerStore.getState().playWithQueue(tracks, index, userId);
+  }
+
+  function handlePlayAll() {
+    if (id) setPlaylistContext(id);
+    if (!userId || tracks.length === 0) return;
+    usePlayerStore.getState().playWithQueue(tracks, 0, userId);
   }
 
   async function handleRemove(item: PlaylistTrackItem) {
     if (!id) return;
     await removeTrackFromPlaylist(item.playlistTrackId, id);
-    setTracks((prev) => prev.filter((t) => t.playlistTrackId !== item.playlistTrackId));
+    setTracks((prev) =>
+      prev.filter((t) => t.playlistTrackId !== item.playlistTrackId),
+    );
   }
 
-  async function handleMoveUp(index: number) {
-    if (index === 0 || !id) return;
-    await reorderTrack(id, index, index - 1);
-    await loadTracks();
-  }
-
-  async function handleMoveDown(index: number) {
-    if (index >= tracks.length - 1 || !id) return;
-    await reorderTrack(id, index, index + 1);
+  async function handleMove(index: number, delta: -1 | 1) {
+    if (!id) return;
+    const next = index + delta;
+    if (next < 0 || next >= tracks.length) return;
+    await reorderTrack(id, index, next);
     await loadTracks();
   }
 
   function startRename() {
     setNameInput(playlist?.name ?? "");
     setEditingName(true);
+    setMoreOpen(false);
   }
 
   async function saveRename() {
@@ -108,6 +190,91 @@ export default function PlaylistDetailScreen() {
     await loadTracks();
   }
 
+  function confirmDelete() {
+    if (!id || !playlist) return;
+    setMoreOpen(false);
+    Alert.alert("Delete Playlist", `Delete "${playlist.name}"?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          await deletePlaylist(id);
+          router.back();
+        },
+      },
+    ]);
+  }
+
+  const totalDuration = useMemo(
+    () => tracks.reduce((acc, t) => acc + (t.duration ?? 0), 0),
+    [tracks],
+  );
+
+  const moreActions = useMemo<ActionItem[]>(
+    () => [
+      {
+        icon: "add-outline",
+        label: "Add tracks",
+        onPress: () => {
+          if (userId) fetchLibraryTracks(userId);
+          setShowPicker(true);
+        },
+      },
+      {
+        icon: "create-outline",
+        label: "Rename",
+        onPress: startRename,
+      },
+      {
+        icon: "trash-outline",
+        label: "Delete playlist",
+        destructive: true,
+        onPress: confirmDelete,
+      },
+    ],
+    [userId, fetchLibraryTracks],
+  );
+
+  const trackContextActions = useMemo<ActionItem[]>(() => {
+    if (!contextTrack || !userId) return [];
+    const t = contextTrack.track;
+    const i = contextTrack.index;
+    const out: ActionItem[] = [
+      {
+        icon: "play-skip-forward",
+        label: "Play next",
+        onPress: () => usePlayerStore.getState().playNext(t.id, userId),
+      },
+      {
+        icon: "list-outline",
+        label: "Add to queue",
+        onPress: () => usePlayerStore.getState().addToQueue(t.id, userId),
+      },
+    ];
+    if (i > 0) {
+      out.push({
+        icon: "arrow-up",
+        label: "Move up",
+        onPress: () => handleMove(i, -1),
+      });
+    }
+    if (i < tracks.length - 1) {
+      out.push({
+        icon: "arrow-down",
+        label: "Move down",
+        onPress: () => handleMove(i, 1),
+      });
+    }
+    out.push({
+      icon: "close",
+      label: "Remove from playlist",
+      destructive: true,
+      onPress: () => handleRemove(t),
+    });
+    return out;
+  }, [contextTrack, userId, tracks.length]);
+
   if (!playlist) {
     return (
       <Screen scroll={false}>
@@ -121,145 +288,169 @@ export default function PlaylistDetailScreen() {
   const trackCount = tracks.length;
   const trackCountLabel = trackCount === 1 ? "1 track" : `${trackCount} tracks`;
 
+  const renderItem = ({
+    item,
+    index,
+  }: ListRenderItemInfo<PlaylistTrackItem>) => (
+    <Row
+      track={item}
+      onPress={() => handleTrackPress(index)}
+      onMore={() => setContextTrack({ track: item, index })}
+    />
+  );
+
+  const ListHeader = (
+    <View
+      style={{
+        paddingHorizontal: space.base,
+        paddingTop: space.sm,
+        paddingBottom: space.lg,
+      }}
+    >
+      <Text variant="eyebrow" tone="muted">
+        Playlist
+      </Text>
+      {editingName ? (
+        <View style={{ marginTop: space.xs }}>
+          <Input
+            value={nameInput}
+            onChangeText={setNameInput}
+            autoFocus
+            onSubmitEditing={saveRename}
+            onBlur={saveRename}
+            returnKeyType="done"
+          />
+        </View>
+      ) : (
+        <Pressable
+          flat
+          onPress={startRename}
+          accessibilityLabel="Rename playlist"
+          accessibilityRole="button"
+          style={{ marginTop: space.xs }}
+        >
+          <Text
+            variant="titleLg"
+            numberOfLines={2}
+            style={{ fontSize: 30, letterSpacing: -0.6 }}
+          >
+            {playlist.name}
+          </Text>
+        </Pressable>
+      )}
+      <Text
+        variant="caption"
+        tone="muted"
+        style={{ marginTop: space.xs }}
+      >
+        {trackCountLabel}
+        {totalDuration > 0 ? `  ·  ${formatTotal(totalDuration)}` : ""}
+      </Text>
+
+      {trackCount > 0 ? (
+        <View style={{ marginTop: space.md }}>
+          <Pressable
+            flat
+            onPress={handlePlayAll}
+            accessibilityLabel="Play playlist"
+            accessibilityRole="button"
+            style={{
+              alignSelf: "flex-start",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              paddingVertical: 8,
+              paddingHorizontal: 14,
+              borderRadius: radius.full,
+              backgroundColor: palette.ink,
+            }}
+          >
+            <Ionicons name="play" size={14} color={palette.inkInverse} />
+            <Text
+              variant="bodyStrong"
+              tone="inverse"
+              style={{ fontSize: 13 }}
+            >
+              Play
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+    </View>
+  );
+
   return (
-    <Screen scroll={false}>
-      <VStack flex gap="lg">
+    <Screen scroll={false} inset={false}>
+      <VStack flex>
         <AppBar
           onBack={() => router.back()}
           trailing={
             <IconButton
-              icon="add"
-              accessibilityLabel="Add tracks"
-              onPress={() => {
-                if (userId) fetchLibraryTracks(userId);
-                setShowPicker(true);
-              }}
+              icon="ellipsis-horizontal"
+              accessibilityLabel="More"
+              size={20}
+              onPress={() => setMoreOpen(true)}
             />
           }
         />
-
-        {editingName ? (
-          <HStack gap="sm">
-            <View style={{ flex: 1 }}>
-              <Input
-                value={nameInput}
-                onChangeText={setNameInput}
-                autoFocus
-                onSubmitEditing={saveRename}
-                onBlur={saveRename}
-              />
-            </View>
-            <Button label="Save" onPress={saveRename} />
-          </HStack>
-        ) : (
-          <VStack gap="xs">
-            <Text variant="eyebrow" tone="muted">
-              Playlist
-            </Text>
-            <Pressable flat onPress={startRename}>
-              <Text variant="display" numberOfLines={2}>
-                {playlist.name}
-              </Text>
-            </Pressable>
-            {trackCount > 0 ? (
-              <Text variant="caption" tone="muted">
-                {trackCountLabel}
-              </Text>
-            ) : null}
-          </VStack>
-        )}
 
         {loading ? (
           <VStack flex justify="center" align="center">
             <ActivityIndicator color={palette.ink} size="large" />
           </VStack>
         ) : tracks.length === 0 ? (
-          <VStack flex justify="center" align="center" gap="sm">
-            <Ionicons
-              name="musical-notes-outline"
-              size={48}
-              color={palette.inkFaint}
-            />
-            <Text variant="title" align="center">
-              Nothing here yet
-            </Text>
-            <Text variant="body" tone="muted" align="center">
-              Tap + to add tracks from your library
-            </Text>
+          <VStack flex>
+            {ListHeader}
+            <VStack flex justify="center" align="center" gap="sm" padX="base">
+              <Ionicons
+                name="musical-notes-outline"
+                size={48}
+                color={palette.inkFaint}
+              />
+              <Text variant="title" align="center">
+                Nothing here yet
+              </Text>
+              <Text variant="body" tone="muted" align="center">
+                Use the more menu to add tracks from your library.
+              </Text>
+            </VStack>
           </VStack>
         ) : (
           <FlatList
             data={tracks}
             keyExtractor={(item) => item.playlistTrackId}
-            renderItem={({ item, index }) => (
-              <ListRow
-                title={item.title}
-                subtitle={item.artist ?? undefined}
-                leading={
-                  <VStack gap="xs" align="center">
-                    <IconButton
-                      icon="chevron-up"
-                      accessibilityLabel="Move track up"
-                      onPress={() => handleMoveUp(index)}
-                      disabled={index === 0}
-                      size={16}
-                    />
-                    <IconButton
-                      icon="chevron-down"
-                      accessibilityLabel="Move track down"
-                      onPress={() => handleMoveDown(index)}
-                      disabled={index === tracks.length - 1}
-                      size={16}
-                    />
-                  </VStack>
-                }
-                trailing={
-                  <IconButton
-                    icon="close"
-                    accessibilityLabel="Remove from playlist"
-                    color={palette.inkMuted}
-                    onPress={() =>
-                      Alert.alert("Remove", `Remove "${item.title}" from playlist?`, [
-                        { text: "Cancel", style: "cancel" },
-                        {
-                          text: "Remove",
-                          style: "destructive",
-                          onPress: () => handleRemove(item),
-                        },
-                      ])
-                    }
-                  />
-                }
-                onPress={() => handleTrackPress(item.id)}
-                onLongPress={() => {
-                  if (!userId) return;
-                  Alert.alert(item.title, undefined, [
-                    {
-                      text: "Play next",
-                      onPress: () => usePlayerStore.getState().playNext(item.id, userId),
-                    },
-                    {
-                      text: "Add to queue",
-                      onPress: () => usePlayerStore.getState().addToQueue(item.id, userId),
-                    },
-                    { text: "Cancel", style: "cancel" },
-                  ]);
-                }}
-              />
-            )}
-            ItemSeparatorComponent={() => <Divider indent={64} inset="none" />}
+            renderItem={renderItem}
+            ListHeaderComponent={ListHeader}
+            contentContainerStyle={{ paddingBottom: space["2xl"] }}
             showsVerticalScrollIndicator={false}
+            initialNumToRender={14}
+            maxToRenderPerBatch={10}
+            windowSize={9}
           />
         )}
-
-        <TrackPickerModal
-          visible={showPicker}
-          tracks={libraryTracks}
-          existingTrackIds={tracks.map((t) => t.id)}
-          onClose={() => setShowPicker(false)}
-          onAdd={handleAddTracks}
-        />
       </VStack>
+
+      <ActionSheet
+        visible={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        actions={moreActions}
+      />
+
+      <ActionSheet
+        visible={contextTrack != null}
+        onClose={() => setContextTrack(null)}
+        title={contextTrack?.track.title}
+        subtitle={contextTrack?.track.artist ?? undefined}
+        actions={trackContextActions}
+      />
+
+      <TrackPickerModal
+        visible={showPicker}
+        tracks={libraryTracks}
+        existingTrackIds={tracks.map((t) => t.id)}
+        onClose={() => setShowPicker(false)}
+        onAdd={handleAddTracks}
+      />
     </Screen>
   );
 }
@@ -295,7 +486,12 @@ function TrackPickerModal({
   }
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="formSheet"
+      onRequestClose={onClose}
+    >
       <Screen scroll={false}>
         <VStack flex gap="lg">
           <AppBar
